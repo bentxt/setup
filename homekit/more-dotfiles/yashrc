@@ -1,0 +1,156 @@
+##### Sample Yashrc #####
+# This is a sample initialization script for yash. Copy this file to ~/.yashrc
+# and add your favorite customization to it.
+
+
+# Firstly, load the common customization script.
+# If you don't like settings applied in this script, remove this line.
+. --autoload --no-alias initialization/common
+
+# These are additional aliases that are not defined in the common script.
+# Uncomment to enable them.
+#alias g='grep'
+#alias l='$PAGER'
+#alias --global L='|$PAGER'
+#alias --global N='>/dev/null 2>&1' N1='>/dev/null' N2='2>/dev/null'
+
+# Uncomment if you want to clear the screen with Ctrl-L.
+#bindkey --emacs '\^L' clear-and-redraw-all
+#bindkey --vi-insert '\^L' clear-and-redraw-all
+#bindkey --vi-command '\^L' clear-and-redraw-all
+
+# Uncomment to enable direnv support. (jq required)
+#_update_direnv() {
+#  eval "$(
+#    direnv export json |
+#    jq -r 'to_entries | .[] |
+#    if .value == null then
+#      @sh "unset \(.key)"
+#    else
+#      @sh "export \(.key)=\(.value)"
+#    end'
+#  )"
+#}
+#_update_direnv
+#YASH_AFTER_CD=("$YASH_AFTER_CD" '_update_direnv')
+
+# And add your own customization below.
+
+
+
+# vim: set et sw=2 sts=2 tw=78 ft=sh:
+
+
+#
+
+bindkey --vi-insert '\R' end-of-line
+
+alias y=/usr/local/bin/yash
+set --vi
+
+#alias bash=/usr/local/bin/yash
+
+# ~/.bashrc: 
+# - executed by bash for (interactive) non-login shells.
+# - see /usr/share/doc/bash/examples/startup-files (in the package bash-doc) for examples
+# - configurations for interactive Bash usage , aliases, favorite editor, config the bash prompt
+
+
+# ~/.profile is loaded initially, but this is a simple way to update
+# edits in ~/.profile: simpy opening a new shell
+
+
+######## NONINTERACTIVE SHELL
+#
+#
+# Declare Variables in ~/.profile
+# ~/.profile cannot not do this, because it should stay fish compatible
+[ -z "${DEBUG+x}" ] && DEBUG=
+
+[ -z "${XDG_CONFIG_HOME+x}" ] && XDG_CONFIG_HOME=
+[ -z "${XDG_DATA_HOME+x}" ] && XDG_DATA_HOME=
+[ -z "${XDG_STATE_HOME+x}" ] && XDG_STATE_HOME=
+[ -z "${XDG_CACHE_HOME+x}" ] && XDG_CACHE_HOME=
+[ -z "${HOST_OS+x}" ] && HOST_OS=
+[ -z "${HOST_BIN_GFIND+x}" ] && HOST_BIN_GFIND=
+[ -z "${HOST_BIN_MYSQIDS_BASH+x}" ] && HOST_BIN_MYSQIDS_BASH=
+[ -z "${LLVM_HOME+x}" ] && LLVM_HOME=
+
+if [ -f "$HOME/.profile" ] ; then
+ . "$HOME/.profile"
+else
+    echo "Warn: ~/.profile not loaded" >&2
+    export PATH=/bin:/usr/bin:/usr/local/bin:$HOME/bin:/HOME/.opam/default/bin:/usr/local/smlnj/bin:$PATH
+fi
+
+
+file_sourcing(){
+    for dir in "$@" ; do
+        [ -n "$DEBUG" ] && echo "try dir '$dir'"
+        [ -d "$dir" ] || continue
+        for f in $dir/*.*sh; do
+            [ -n "$DEBUG" ] && echo "try file '$f'"
+            [ -f "$f" ] || continue
+            case "${f##*/}" in
+                _*|lib*) continue ;;
+                *.sh)
+                    [ -n "$DEBUG" ] && echo source $f
+                    . "$f"
+                ;;
+                *) : ;;
+            esac
+        done
+    done
+}
+
+
+
+file_sourcing "$HOME/kit/conf"
+
+
+# if this is a non-interactive (login) shell, then this is it
+[ -z "$PS1" ] && return
+
+######## INTERACTIVE SHELL
+#
+file_sourcing "$HOME/kit/aliases" 
+
+if [ -n "${XDG_CACHE_HOME:-}" ] ; then
+    file_sourcing "${XDG_CACHE_HOME}/aliases"
+else
+    file_sourcing "$HOME/.cache/aliases"
+fi
+
+
+## GLOBAL SETTINGS
+# Setting for the new UTF-8 terminal support in Lion
+#
+export LC_CTYPE=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+
+# From here on out, I put in things that are meaningful to interactive shells, like aliases,
+# `shopt` invocations, HISTORY control, terminal characteristics, PROMPT, etc.
+
+# in this setup ~/.bashrc is called by .bash_profile
+# If not running interactively, don't do anything
+
+#set -o vi
+
+# See bash(1) for more options
+#HISTCONTROL=ignoreboth
+
+# append to the history file, don't overwrite it
+#shopt -s histappend
+
+# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
+#HISTSIZE=1000
+#HISTFILESIZE=2000
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS.
+#shopt -s checkwinsize
+
+
+
+alias sh=/usr/local/bin/yash

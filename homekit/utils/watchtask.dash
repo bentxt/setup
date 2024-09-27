@@ -1,0 +1,589 @@
+#!/bin/sh
+#
+# NAME
+#
+#   watchtask 
+#
+# DESCRIPTION
+#
+#   control a fs watcher , that handles a watchfile and then run on a task file
+#
+#   Workflow:
+#
+#   1. start server
+#       - the server watches an server-outfile
+#       - if the server-outfile is altered, it send a command to this this script (cat)
+#           - if there is something in the file:
+#               - the file is 'catted' 
+#               - else: the terminal is reset
+#
+#   2. start client
+#       - if a file is altered, it sends a command to this script (build), 
+#           which executes a build file, 
+#       - if the build buildoutput is larger as the client terminal, 
+#           the result is send to the server-outfile
+#
+#
+# SYNOPSIS
+#
+#   watchtask [OPTIONS] <ACTION> [pattern], or --help
+#
+# OPTIONS
+#
+#   -f|--file <outfile>
+#   -n|--name <outname>
+#
+# ACTIONS
+#
+#            send|send-file <file>
+#
+#            get|get-file 
+#
+#            cat|cat-file 
+#
+#            start-server 
+#
+#            build-client
+#
+#            start-client <command|file> [pattern]
+#                   action      script file or a  command 
+#                               with {{file}} the specific file can be used
+#
+#                   pattern     file pattern or '*' if nothing is given
+#
+
+set -u
+
+[ -z ${DEBUG+x} ] && DEBUG=
+
+UTILS_WATCHTASK__STATE_DIR=
+
+utils_watchtask__init(){
+    local maindir="${1:-}"
+
+    local state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+    if [ -d "$state_home" ] ; then
+        UTILS_WATCHTASK__STATE_DIR="$state_home/utils_watchtask"
+    else
+        fail "There is no state home in '$state_home'"
+        return 1
+    fi
+
+    if [ -d "${maindir}" ]; then
+        local inc
+        for inc in 'tmuxutil.dash' 'libutil.sh' ; do
+            if [ -f "$maindir/$inc" ] ; then
+                . "$maindir/$inc" || {
+                    fail "could not incluce '$maindir/$inc'"
+                    return 1
+                }
+            else
+                fail "could not find library include '$maindir/$inc'"
+                return 1
+            fi
+        done
+    else
+        fail "invalid maindir  '${maindir}'"
+        return 1
+    fi
+}
+
+utils_watchtask__run() {
+
+    local command=;
+    local opt_file=;
+    local opt_name=;
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        -n|--name)
+            opt_name="${2:-}"
+            if [ -n "$opt_name" ] ; then
+                shift
+            else
+                fail 'no arg for opt name'
+                return 1
+            fi
+            
+            ;;
+        -f|--file)
+            opt_file="${2:-}"
+            if [ -n "$opt_file" ] ; then
+                shift
+            else
+                fail 'no arg for opt file'
+                return 1
+            fi
+            ;;
+        -*)
+            info "invalid arg '$1', run --help"
+            return 1
+            ;;
+        *)
+            command="$1"
+            shift
+            break
+            ;;
+        esac
+        shift
+    done
+
+    if [ -z "$command" ] ; then
+        fail "no command"
+        return 1
+    fi
+
+
+    local opt_watchfile=
+    if [ -n "$opt_file" ] && [ -n "$opt_name" ] ; then
+        fail 'define either opt_file or opt_name'
+    elif [ -n "$opt_file" ] ; then
+        opt_watchfile="$(utils_watchtask__get_watchfile "$opt_file")"
+    elif [ -n "$opt_name" ] ; then
+        opt_watchfile="$(utils_watchtask__get_watchfile "$opt_name")"
+    fi
+            
+    utils_watchtask__handle_command "$command" "$opt_watchfile" "$@"
+}
+
+
+
+utils_watchtask__state_dir() {
+
+    if [ -n "$UTILS_WATCHTASK__STATE_DIR" ] ; then
+        if  mkdir -p "$UTILS_WATCHTASK__STATE_DIR"  ; then
+            prn "$UTILS_WATCHTASK__STATE_DIR"
+       else
+            fail "could not create state dir in '$UTILS_WATCHTASK__STATE_DIR'"
+            return 1
+       fi
+    else
+        fail 'UTILS_WATCHTASK__STATE_DIR empty'
+        return 1
+    fi
+}
+
+
+
+utils_watchtask__get_watchfile() {
+    local watchitem="${1:-}"
+    if [ -z "$watchitem" ] ; then
+        fail 'no watchitem'
+        return 1
+    fi
+
+    local opt_watchfile="${2:-}"
+
+    if [ -n "$watchitem" ] && [ -n "$opt_watchfile" ] ; then
+        fail 'either item or watchfile'
+        return 1
+    fi
+
+    if [ -n "$opt_watchfile" ] ; then
+        prn "$opt_watchfile"
+        return 0
+    elif [ -z "$watchitem" ] ; then
+        fail 'no watchitem'
+        return 1
+    fi
+
+
+    case "$watchitem" in
+        */*) prn "$watchitem" ;;
+        *)
+            local watchdir="${UTILS_WATCHTASK__STATE_DIR:-}"
+            mkdir -p "${watchdir}" || {
+                fail 'could not get watchdir'
+                return 1
+            }
+            case "$watchitem" in
+                *.txt)  prn "$watchdir/$watchitem";;
+                *.*) 
+                    fail 'invalid file extenstion'
+                    return 1
+                    ;;
+                *)    prn "$watchdir/${watchitem}file.txt" ;;
+            esac
+        ;;
+    esac
+}
+
+
+
+utils_watchtask__server_cat() {
+    local opt_watchfile="${1:-}"
+
+
+    local char_count=
+    if [ -f "$opt_watchfile" ] ; then
+        char_count="$(wc -c < "$opt_watchfile" | tr -d ' ')"
+    else
+        fail "cat: no watchfile under '$opt_watchfile'"
+        return 1
+    fi
+
+    #local cont=; cont="$(cat -tve "$opt_watchfile")"
+    #if ! [ "$cont" = '$' ] ; then
+
+    if [ "$char_count" -eq 1 ] ; then
+        reset
+    else
+        cat "$opt_watchfile"
+    fi
+
+    #gaze "$watchfile" -c "sh '$0' server-out"
+}
+
+
+
+# starting server and watch ~/....watchdir/
+# cat ~/...watchdir/serverfile3 if changed
+#
+utils_watchtask__start_server() {
+
+    local watchdir=
+    watchdir="$(utils_watchtask__state_dir)"
+
+    echo "starting with '$watchdir'"
+
+    gaze "$watchdir" -c "cat {{file}}"
+}
+
+utils_watchtask__send_file() {
+    local opt_watchfile="$1"
+    shift;
+
+    local watchfile=;
+    local infile=;
+    case "$#" in
+        0) 
+            fail 'send-file - no file input'
+            return 1
+            ;;
+        1) 
+            if [ -n "$opt_watchfile" ] ; then
+                watchfile="$opt_watchfile"
+                infile="$1"
+            else
+                fail 'send-file - no valid watchfile'
+                return 1
+            fi
+            ;;
+        2)
+            if [ -n "$opt_watchfile" ] ; then
+                fail 'send-file - no opt_watchfile needed'
+            fi
+            infile="${1:-}"
+            watchfile="$(utils_watchtask__get_watchfile "$2")" 
+            ;;
+        *)
+            fail 'invalid number of args'
+            return 1
+            ;;
+    esac
+
+    if ! [ -f "${infile}" ] ; then
+        fail "could not fine infile '$infile'"
+        return 1
+    fi
+
+    if [ -z "$watchfile" ]  ; then
+        fail 'no watchfile'
+        return 1
+    fi
+    
+    rm -f "$watchfile"
+
+    cp "$infile" "$watchfile"
+
+    tmux has-session -t 'WATCHER:DOC' 2>/dev/null && tmux select-window -t 'WATCHER:DOC'
+}
+
+
+utils_watchtask__build_client() {
+    local watchfile="${1:-}"
+    if [ -z "$watchfile" ] ; then
+        fail "no watchfile found under '$watchfile'"
+        return 1
+    fi
+
+    local build_file="${2:-}"
+    if ! [ -f "$build_file" ] ; then
+        fail "no build_file found under '$build_file'"
+        return 1
+    fi
+
+    local build_input="${3:-}"
+    if [ -z "$build_input" ] ; then
+        fail 'no build_file'
+        return 1
+    fi
+
+
+    local build_interpreter="${build_file##*.}"
+    if [ -z "$build_interpreter" ] ; then
+        fail 'no build_interpreter'
+        return 1
+    fi
+    local watchdir="${UTILS_WATCHTASK__STATE_DIR:-}"
+    if [ -z "$watchdir" ] ; then
+        fail 'could not get watchdir'
+        return 1
+    fi
+    mkdir -p $watchdir
+
+    local taskoutput="$watchdir/taskoutput.txt"
+
+    # echo    /usr/bin/env "${build_interpreter}" "$build_file" "$build_input" # >> "$tmpfile" 2>&1
+
+    /usr/bin/env "${build_interpreter}" "$build_file" "$build_input" >> "$taskoutput" 2>&1
+    echo '----------------' >> "$taskoutput"
+    echo  "${build_interpreter}" "$build_file" "$build_input" >> "$taskoutput" 
+    echo '' >> "$taskoutput"
+
+    local file_lines=; file_lines="$(awk 'END {print NR}' "$taskoutput")" 
+    file_lines=$((file_lines + 3))
+    if [ -z "$file_lines" ] ; then
+        fail 'no file_lines'
+        return 1
+    fi
+
+    local terminal_lines=; terminal_lines="$(tput lines)"
+    if [ -z "$terminal_lines" ] ; then
+        fail 'no terminal_lines'
+        return 1
+    fi
+
+    local head_lines=; head_lines=$((terminal_lines - 6))
+    if [ -z "$head_lines" ] ; then
+        fail 'no head_lines'
+        return 1
+    fi
+
+    for num in "$file_lines" "$terminal_lines" "$head_lines" ; do
+        case "$num" in
+            *[a-z]*|*[A-Z]*) 
+                fail 'num not a number'
+                return 1
+                ;;
+            [0-9]*)  : ;;
+            *) : ;;
+        esac
+    done
+
+    local term_reset=;
+
+    if [ $head_lines -gt 0 ] ;then
+        if [ $file_lines -gt $terminal_lines ] ; then
+            head -$head_lines "$taskoutput" 
+            echo '----------------' 
+            echo  "${build_interpreter}" "$build_file" "$build_input" 
+            echo '...'
+            cat "$taskoutput" > "$watchfile"
+        else
+            cat $taskoutput
+            echo  "" > "$watchfile"
+        fi
+    else
+        echo '...'
+        cat "$taskoutput" > "$watchfile"
+    fi
+
+
+    tmux has-session -t 'WATCHER:OUT' 2>/dev/null && tmux select-window -t 'WATCHER:OUT'
+}
+
+
+utils_watchtask__start_client() {
+    local opt_watchfile="${1:-}"
+
+    local watch_name="${2:-}"
+
+    local taskfile="${3:-}"
+
+    if [ -n "$opt_watchfile" ] && [ -n "$watch_name" ]  ; then
+        fail 'either opt_watchfile or watch_name'
+        return 1
+    fi
+
+    [ -z "$watch_name" ] && watch_name='out' 
+    local watch_file=;
+    watch_file="$(utils_watchtask__get_watchfile "$watch_name" "$opt_watchfile")"
+
+    local pattern="${4:-}"
+    [ -z "$pattern" ] && pattern='*'
+
+    [ -z "$taskfile" ] && taskfile='task.sh' 
+    if ! [ -f "$taskfile" ] ; then
+        fail "no taskfile not exists '$taskfile'"
+        return 1
+    fi
+
+    local abspwd=; abspwd="$(absdir "$PWD")"
+    if [ -z "$abspwd" ] ; then
+        fail no abspwd
+        return 1
+    fi
+    local pwdname=; pwdname="$(basename "$abspwd")"
+    if [ -z "$pwdname" ] ; then
+        fail no pwdname
+        return 1
+    fi
+
+    local md5sum=; md5sum="$(get_md5sum "$abspwd")"
+    if [ -z "$md5sum" ] ; then
+        fail no md5sum
+        return 1
+    fi
+
+    local tmuxname="${md5sum}-${pwdname}"
+    local gazecmd="/usr/local/bin/gaze '$pattern' -c '/bin/sh $0 -f $watch_file  build $taskfile {{file}}'" 
+
+
+    if tmux has-session -t BUILD ; then
+        if tmux has-session -t "BUILD:$tmuxname" ; then
+            tmux select-window -t "BUILD:$tmuxname"
+        else
+            echo "trying to create a new tmux window"
+
+            local watchdir="${UTILS_WATCHTASK__STATE_DIR:-}"
+            if [ -z "$watchdir" ] ; then
+                fail 'could not get watchdir'
+                return 1
+            fi
+            mkdir -p "$watchdir"
+
+            local watchdir_index="$watchdir/dirindex.txt"
+
+            tmux  new-window -n "$tmuxname"  -t BUILD "cd '$abspwd' && ${gazecmd}"
+            echo  "${tmuxname}###${abspwd}" >> "$watchdir_index"
+#            tmux  new-window -n 'DOGG' -c "$HOME/Downloads" -t BUILD
+        fi
+    else
+        ${gazecmd}
+    fi
+}
+
+
+utils_watchtask__handle_command(){
+    local command="${1}"
+    shift
+    local opt_watchfile="${1}"
+    shift
+
+
+    case "$command" in
+        send|send-file)
+            utils_watchtask__send_file "$opt_watchfile" "$@"
+            break
+            ;;
+        get|get-file) 
+            #prn "$opt_watchfile"
+            fail todo get-file
+            break
+            ;;
+        cat|cat-file) 
+            utils_watchtask__server_cat "$opt_watchfile" "$@"
+            break
+            ;;
+        build|build-client)
+            utils_watchtask__build_client "$opt_watchfile" "$@"
+            break
+            ;;
+        start-client)
+            utils_watchtask__start_client "$opt_watchfile" "$@"
+            break
+            ;;
+        start-server) 
+            utils_watchtask__start_server "$opt_watchfile" "$@"
+            break
+            ;;
+        server-out) 
+            utils_watchtask__server_cat "$opt_watchfile" "$@"
+            break
+            ;;
+        *)
+            fail "invalid commanD '$command'"
+            return 1
+        esac
+
+}
+
+### Prelude
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+info() { echo "$*" >&2; }
+warn() { 
+    case "${1:-}" in
+        '-verbose') 
+            shift
+            echo "Warn: $*" >&2
+            ;;
+        '-quiet') : ;;
+        *)
+            fail "invalid directive '${1:-}'" 
+            return 1
+            ;;
+    esac
+}
+
+timestamp() { date +'%Y%m%d%H%M%S'; }
+getos() { uname | tr '[:upper:]' '[:lower:]'; }
+getlines() { wc -l <"${1:-}" | tr -d ' '; }
+newpath() { case "$1" in */*) prn "${1%/*}/$2" ;; *) prn "$2" ;; esac }
+newpathext() { newpath "$1" "$(basename "$1" "${1##*.}")$2"; }
+
+die() {
+	echo "$@" >&2
+	exit 1
+}
+abspath() {
+	readlink -f "${1}" 2>/dev/null || {
+		perl -MCwd=abs_path -e 'print abs_path($ARGV[0]);' "${1}"
+	}
+}
+
+usage() {
+    info "not enough arguments"
+	for regex in 's/^#+\s*//g; if($_ && $s){print "usage: $_"; exit 0; };  $s=1 if (/^SYNOPSIS\s*$/);' 'if (/^\s*#+\s*([uU]sage[a-z\s-_]*:.*)\s*/){print "$1"; $s=1; exit 0 ; };'; do
+		perl -ne "${regex}"';END{exit 1 unless $s;}' "$0" >&2 && exit 1
+	done
+    exit 1
+}
+
+main() {
+	local argnum="$1"
+	shift
+
+	[ $# -eq $argnum ] && usage
+
+    local arg
+    for arg in "$@" ; do
+        case "${arg}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#+\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+                ;;
+            *) : ;;
+        esac
+    done
+}
+
+### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+	MAINSCRIPT="$(abspath "$0")"
+    [ -z "$MAINSCRIPT" ] && die "Err: could not set MAINSCRIPT"
+	if [ -t 0 ]; then
+		main -1 "${@}"
+	else
+		die "Err: cannot run as part of a pipe ..."
+	fi
+	utils_watchtask__init "${MAINSCRIPT%/*}" || die 'Abort init ...'
+	utils_watchtask__run "$@" || die 'Abort run ...'
+else
+	utils_watchtask__init "${MAINSCRIPT%/*}" || {
+		fail 'could not run init'
+		return 1
+	}
+fi

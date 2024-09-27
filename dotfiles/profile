@@ -1,0 +1,121 @@
+# ~/.profile: 
+# ------------
+#
+# env variables for (ba)sh and fish, available in the CLI and Scripting
+#
+# - set environment variables (except bash specific ones)
+# - executed by the command interpreters for login shells. Must be compatible with /bin/sh (bash,dash,ksh)
+#
+#
+# User defined
+export AUXFILES="$HOME/aux"
+
+export LLVM_VERSION=12
+# XDG Base Directory Specification
+# https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+#
+# XDG_CONFIG_HOME
+# for user-specific files
+test -n "$XDG_CONFIG_HOME" || export XDG_CONFIG_HOME="$HOME/.config"
+test -d "$XDG_CONFIG_HOME" || mkdir -p "$XDG_CONFIG_HOME"
+# XDG_DATA_HOME
+# user-specific data, eg $XDG_DATA_HOME/jupyter
+test -n "$XDG_DATA_HOME" || export XDG_DATA_HOME="$HOME/.local/share"
+test -d "$XDG_DATA_HOME" || mkdir -p "$XDG_DATA_HOME"
+# XDG_STATE_HOME
+# where state files should be stored
+# contains state data that should persist between (application) restarts, but that is not important or portable enough to the user that it should be stored in $XDG_DATA_HOME. It may contain:
+#actions history (logs, history, recently used files, …)
+#current state of the application that can be reused on a restart (view, layout, open files, undo history, …)
+test -n "$XDG_STATE_HOME" || export XDG_STATE_HOME="$HOME/.local/state"
+test -d "$XDG_STATE_HOME" || mkdir -p "$XDG_STATE_HOME"
+# XDG_CACHE_HOME
+# non-essential data files
+test -n "$XDG_CACHE_HOME" || export XDG_CACHE_HOME="$HOME/.cache"
+test -d "$XDG_CACHE_HOME" || mkdir -p "$XDG_CACHE_HOME"
+# XDG_RUNTIME_DIR
+# non-essential runtime files
+# user-specific non-essential runtime files and other file objects (such as sockets, named pipes, ...
+test -n "$XDG_RUNTIME_DIR" || export XDG_RUNTIME_DIR="$XDG_CACHE_HOME/xdgr"
+test -d "$XDG_RUNTIME_DIR" || mkdir -p "$XDG_RUNTIME_DIR"
+## System Variables
+### JAVA_HOME
+test -d "$HOME/build/openjdk/jdk-22.jdk/Contents/Home" && export JAVA_HOME="$HOME/build/openjdk/jdk-22.jdk/Contents/Home"
+### LLVM_HOME
+test -d "/usr/local/opt/llvm@$LLVM_VERSION" && export LLVM_HOME="/usr/local/opt/llvm@$LLVM_VERSION"
+########## PATH
+export PATH='/bin:/sbin:/usr/bin'
+## PATH
+test -d '/usr/sbin'         && export PATH="/usr/sbin:$PATH"
+test -d '/opt/bin'          && export PATH="/opt/bin:$PATH"
+test -d '/opt/sbin'         && export PATH="/opt/sbin:$PATH"
+test -d '/usr/local/sbin'   && export PATH="/usr/local/sbin:$PATH"
+test -d '/usr/local/bin'    && export PATH="/usr/local/bin:$PATH"
+test -d '/opt/local/bin'    && export PATH="/opt/local/bin:$PATH"
+test -d '/opt/local/sbin'   && export PATH="/opt/local/sbin:$PATH"
+test -d "$HOME/local/bin"  && export PATH="$HOME/local/bin:$PATH"
+test -d "$HOME/.bin"        && export PATH="$HOME/.bin:$PATH"
+test -d "$HOME/bin"        && export PATH="$HOME/bin:$PATH"
+test -d "$HOME/.local/bin"  && export PATH="$HOME/.local/bin:$PATH"
+#test -d "$HOME/local/odin/odin"  && export PATH="$HOME/local/odin/odin:$PATH"
+test -d "$HOME/build/bin"   && export PATH="$HOME/build/bin:$PATH"
+test -d "$HOME/dev/bin"     && export PATH="$HOME/dev/bin:$PATH"
+test -d "$HOME/.opam/default/bin" && export PATH="$HOME/.opam/default/bin:$PATH"
+test -d "$HOME/.cargo/bin" && export PATH="$HOME/.cargo/bin:$PATH"
+test -d "/Applications/Racket v8.12/bin" &&  export PATH="/Applications/Racket v8.12/bin:$PATH"
+test -d "$HOME/go/bin" && export PATH="$HOME/go/bin:$PATH"
+test -d "$HOME/local/dlang/dmd2/osx/bin" && export PATH="$HOME/local/dlang/dmd2/osx/bin:$PATH"
+### LANG 
+test -d "$JAVA_HOME" &&  export PATH="$JAVA_HOME/bin:$PATH"
+test -d "$LLVM_HOME" &&  export PATH="$LLVM_HOME/bin:$PATH"
+#
+## ALIASES
+test -f $AUXFILES/aliases/utils-aliases_profile.sh && source $AUXFILES/aliases/utils-aliases_profile.sh
+
+test -f $AUXFILES/aliases/basic-aliases-profile.sh && source $AUXFILES/aliases/basic-aliases-profile.sh
+test -f $AUXFILES/aliases/plx_profile.sh && source $AUXFILES/aliases/plx_profile.sh
+test -f $AUXFILES/aliases/tools-aliases.sh && source $AUXFILES/aliases/tools-aliases.sh
+test -f $AUXFILES/aliases/basics.sh && source $AUXFILES/aliases/basics.sh
+
+
+
+# Basics
+alias chmox='chmod 0755'
+# In profile only essential commands
+test -f '/usr/local/opt/vim/bin/vim' && alias vim='/usr/local/opt/vim/bin/vim'
+test -f $HOME/.bin/abspath.sh && alias abspath="dash $HOME/.bin/abspath.sh"
+test -f $HOME/.bin/ack.pl && alias ack="perl $HOME/.bin/ack.pl"
+test -f $HOME/.bin/rename.pl && alias rename="perl $HOME/.bin/rename.pl"
+alias mamperl='/Applications/MAMP/Library/bin/perl'
+alias mampcpan='/Applications/MAMP/Library/bin/cpan'
+command -v eza >/dev/null && alias ls='eza'
+command -v bat >/dev/null && alias cat='bat'
+alias perl='/Applications/MAMP/Library/bin/perl'
+alias cpan='/Applications/MAMP/Library/bin/cpan'
+
+
+export LD_LIBRARY_PATH=""
+test -d "/usr/local/lib" && export LD_LIBRARY_PATH="/usr/local/lib"
+
+command -v brew >/dev/null && export BREW_PREFIX=$(brew --prefix)
+test -n "$BREW_PREFIX" && test -d "$BREW_PREFIX/lib" && test -z "$LD_LIBRARY_PATH" && export LD_LIBRARY_PATH="$BREW_PREFIX/lib"
+test -n "$BREW_PREFIX" && test -d "$BREW_PREFIX/lib" && test -n "$LD_LIBRARY_PATH" && test "$LD_LIBRARY_PATH" != "$BREW_PREFIX/lib" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$BREW_PREFIX/lib"
+
+command -v brew >/dev/null && export BREW_OPENSSL_PREFIX="$(brew --prefix openssl)"
+test -n "$BREW_OPENSSL_PREFIX" && test -d "$BREW_OPENSSL_PREFIX/lib" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$BREW_OPENSSL_PREFIX/lib"
+
+test -d "/usr/lib" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/lib"
+test -d "/opt/local/lib" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/opt/local/lib"
+test -d "/usr/local/lib64" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib64"
+
+export DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH:$LD_LIBRARY_PATH"
+
+
+export PKG_CONFIG_PATH=''
+
+test -d "/usr/local/lib/pkgconfig" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig"
+test -d "/usr/local/share/pkgconfig" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/share/pkgconfig"
+test -d "/usr/local/opt/pkgconfig" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/pkgconfig"
+test -d "/usr/X11/lib/pkgconfig" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/X11/lib/pkgconfig"
+
+

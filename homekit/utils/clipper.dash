@@ -1,0 +1,190 @@
+#!/bin/sh
+
+# Template for shell scripts
+#
+# Shell scripts that also can be used as modules/libraries for other scripts.
+# When used as libraries this is how its done:
+#
+# With 'place' you can define how far back the selection goes, 
+#   
+#   last = 1
+#   prev = 2
+#
+#
+# Usage: clipper [. . . ]
+#
+#
+
+set -eu
+
+[ -z ${DEBUG+x} ] && DEBUG=
+
+UTILS_CLIPPER__HOME="${XDG_CACHE_HOME:-$HOME/.cache}/clipper"
+
+
+utils_clipper__get_cliphome() {
+
+	local cliphome="${UTILS_CLIPPER__HOME:-}"
+    if [ -z "$cliphome" ] ; then
+        fail "cliphome is empty"
+        return 1
+    fi
+
+
+	[ -d "$cliphome" ] || mkdir -p "$cliphome"
+
+	if [ -d "$cliphome" ]; then
+		prn "$cliphome"
+	else
+		fail "could not get cliphome '$cliphome'"
+		return 1
+	fi
+}
+
+
+utils_clipper__new_clipfile() {
+
+	local clipdir=; clipdir="$(utils_clipper__get_cliphome)" 
+	if [ -z "$clipdir" ] || ! [ -d "$clipdir" ]; then
+		fail "clipdir '$clipdir' invalid"
+		return 1
+	fi
+
+    local clippath=
+    for i in $(seq 1 4); do 
+        local secstamp=; secstamp="$(secstamp)" || {
+            fail 'could not get secstamp'
+            return 1
+        }
+        if [ -z "$secstamp" ] ; then
+            fail 'could not get secstamp'
+            return 1
+        fi
+	    local clippath_probe="$clipdir/$secstamp"
+        if [ -f "$clippath_probe" ]; then
+		    sleep 1
+        else
+            clippath="$clippath_probe"
+            break
+        fi
+    done
+
+
+    if [ -n "$clippath" ] ; then
+        if [ -f "$clippath" ]; then
+            fail "clippath already exists '$clippath'"
+        else
+            prn "$clippath"
+        fi
+    else
+        fail "clippath could not be created'"
+        return 1
+    fi
+}
+
+
+utils_clipper__get_last_clipfile() {
+
+    local dots=1
+
+    for dot in $@; do
+        case "$dot" in
+            .) dots=$((dots+1));;
+            *) fail 'invalid characters in place, run --help' ;;
+        esac
+    done
+
+	local clipdir=; clipdir="$(utils_clipper__get_cliphome)" 
+
+	if [ -z "$clipdir" ] || ! [ -d "$clipdir" ]; then
+		fail "clipdir '$clipdir' invalid"
+		return 1
+	fi
+
+	local clipfile=
+	clipfile="$(ls "$clipdir" | sort -r | sed -n "${dots}p")" 
+
+    if [ -z "$clipfile" ] ; then
+		fail 'could not fetch clipfile'
+		return 1
+    fi
+
+	local clippath=
+	clippath="$clipdir/$clipfile"
+
+	if [ -f "$clippath" ]; then
+		cat "$clippath"
+        info '----------'
+        info "$clippath"
+	else
+		fail "clippath '$clippath' invalid"
+		return 1
+	fi
+
+}
+
+
+utils_clipper__run() {
+
+	if [ -t 0 ]; then
+        utils_clipper__get_last_clipfile "$@"
+	else
+		local new_clipfile=; new_clipfile="$(utils_clipper__new_clipfile )" 
+
+		while read -r line; do
+            info "$line"
+			echo "$line" >> $new_clipfile
+		done
+	fi
+}
+
+#####
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+info() { echo "$@" >&2; }
+die() {
+	echo "$@" >&2
+	exit 1
+}
+
+secstamp() { date +'%Y%m%d%H%M%S'; }
+absdir() (cd "${1}" && pwd -P)
+
+abspath() {
+    readlink -f "${1:-}" 2>/dev/null || {
+        perl -MCwd=abs_path -e 'print abs_path($ARGV[0]);' "${1:-}"
+    }
+}
+
+
+utils_clipper__main() {
+
+    if [ $# -eq 0 ] ; then
+        info "not enough args"
+        perl -ne 's/^#+\s*//g; die "usage: $_" if($_ && $s); $s=1 if (/^SYNOPSIS\s*$/);' "$0" >&2
+        exit 1
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "${1:-}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+            ;;
+            *) break ;;
+        esac
+        shift
+    done
+}
+
+
+#### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+    MAINSCRIPT="$(abspath "$0")"
+    if [ -t 0 ]; then
+        utils_clipper__main -1 "$@" || die 'Abort main ...'
+    fi
+    utils_clipper__run "$@" || die 'Abort run ...'
+fi

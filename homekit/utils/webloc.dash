@@ -1,0 +1,254 @@
+#!/bin/sh
+#
+# NAME
+#
+#   webloc - Handling of .weblocfiles
+#
+# DESCRIPTION
+#
+#   Webloc files (.webloc) are xml base text files that contain an URL, and they 
+#   can be used as bookmark files
+#
+# SYNOPSIS
+#
+#   webloc [COMMANDS] [INPUT] [OUTPUT], or run with --help
+#
+# COMMANDS
+#
+#   geturl <.webloc file>       extract and print the url of an .webloc file
+#   print <INPUT>               print webloc xml to stdout
+#   write <INPUT> <OUTPUT>       same as `print`, but write to file
+#
+# INPUTS
+#
+#   - text file (.md/.txt)
+#   - url
+#
+# OUTPUT
+#
+#   .webloc file
+#   
+
+set -eu
+
+prn() { printf "%s" "$*"; }
+fail() { echo "Fail: $*" >&2; }
+info() { echo "$@" >&2; }
+die() {
+   echo "$@" >&2
+   exit 1
+}
+
+absdir() { (cd "${1}" && pwd -P); }
+stamp() { date +'%Y%m%d%H%M%S'; }
+abspath() {
+    readlink -f "${1:-}" 2>/dev/null || {
+        perl -MCwd=abs_path -e 'print abs_path($ARGV[0]);' "${1:-}"
+    }
+}
+
+utils_webloc__init() {
+    local maindir="${1:-}"
+    if ! [ -d "${maindir:-}" ]; then
+        fail "invalid maindir in '${maindir:-}'"
+        return 1
+    fi
+    . "$maindir/liburl.sh"
+}
+
+
+utils_webloc__write() {
+    local item="${1:-}"
+   if [ -z "$item" ]; then
+      fail 'no item'
+      return 1
+   fi
+   local title="${2:-}"
+
+   if [ -f "$item" ]; then
+      if [ -z "$title" ]; then
+         title="$(head -1 "$item")"
+      fi
+    else
+      case "$item" in
+      http*)
+         if [ -z "$title" ]; then
+            title="$(utils_liburl__get_title "$item")"
+         fi
+         ;;
+      *) : ;;
+      esac
+   fi
+   if [ -z "$title" ]; then
+      info 'cannot get title, please enter'
+      read -r title
+   fi
+
+   local clean_title=
+   if [ -n "$title" ]; then
+      clean_title="$(utils_liburl__aux_clean_string "$title")" 
+   else
+      fail 'no title'
+      return 1
+   fi
+
+   if [ -z "$clean_title" ]; then
+      fail "could not get clean title for title '$title'"
+      return 1
+   fi
+
+   local file="$clean_title.webloc"
+
+   if [ -f "$file" ] ; then
+      fail "file exists already '$file'"
+      return 1
+   fi
+
+   if utils_webloc__print "$item" | tee "$file"; then
+      echo "Ok, file '$file' written"
+      return 0
+   else
+      fail "could not write to file '$file'"
+      return 1
+   fi
+}
+
+utils_webloc__print() {
+   local item="${1:-}"
+   if [ -z "$item" ]; then
+      fail 'no item'
+      return 1
+   fi
+
+   if [ -f "$item" ]; then
+      local ext="${item##*.}"
+      case "$item" in
+      *.md | *.txt) address="$(utils_liburl__get_fileurl "$item")" ;;
+      *)
+         if utils_liburl__filext_big "$ext"; then
+            fail "(utils_webloc__get_web_address): looks like file with unsupported file item '$item'"
+            return 1
+         else
+            fail "this file item is not supported '$item'"
+            return 1
+         fi
+         ;;
+      esac
+   elif [ -e "$item" ]; then
+      fail "this item exists on the file system, but is not a file '$item'"
+      return 1
+   else
+      address="$(utils_webloc__get_web_address "$item")" 
+   fi
+
+   [ -n "$address" ] || {
+      fail 'could not fetch address'
+      return 1
+   }
+
+   echo '<?xml version="1.0" encoding="UTF-8"?>'
+   echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+   echo '<plist version="1.0">'
+   echo '<dict>'
+   echo '    <key>URL</key>'
+   echo "	    <string>${address}</string>"
+   echo '</dict>'
+   echo '</plist>'
+
+}
+
+utils_webloc__geturl() {
+   local webloc="${1:-}"
+   if [ -z "$webloc" ]; then
+      fail 'no *.webloc file'
+      return 1
+   fi
+
+   case "$webloc" in
+       *.webloc) : ;;
+       *) 
+           fail "doesn not look like a webloc '$webloc'"
+           return 1
+           ;;
+   esac
+
+   local string=
+   string="$(perl -ne '/\<string\>([^\<]*)\<\/string>/ && print $1' "$webloc")" 
+    if [ -n "$string" ] ; then
+        prn "$string"
+    else
+        fail 'string empty'
+        return 1
+    fi
+}
+
+
+
+utils_webloc__run() {
+
+   local cmd=
+   while [ $# -gt 0 ]; do
+      case "$1" in
+      -*)
+         fail "unknown option, run --help"
+         return 1
+         ;;
+      write | geturl | print)
+         cmd="utils_webloc__${1}"
+         shift
+         break
+         ;;
+      esac
+      shift
+   done
+
+   if [ -n "$cmd" ]; then
+      "${cmd}" "$@" || {
+         fail "could not run cmd '$cmd'"
+         return 1
+      }
+   else
+      fail 'found no cmd'
+      return 1
+   fi
+}
+
+
+utils_webloc__main() {
+
+    if [ $# -eq 0 ] ; then
+        info "not enough args"
+        perl -ne 's/^#+\s*//g; die "usage: $_" if($_ && $s); $s=1 if (/^SYNOPSIS\s*$/);' "$0" >&2
+        exit 1
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "${1:-}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+            ;;
+            *) break ;;
+        esac
+        shift
+    done
+}
+
+
+#### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+    MAINSCRIPT="$(abspath "$0")"
+    if [ -t 0 ]; then
+        utils_webloc__main "$@" || die 'Abort main ...'
+    else
+        die "Err: must be use interactively ..."
+    fi
+    utils_webloc__init "${MAINSCRIPT%/*}"  || die 'Abort init ...'
+    utils_webloc__run "$@" || die 'Abort run ...'
+else
+    utils_webloc__init "${MAINSCRIPT%/*}" || {
+        fail 'could not run init'
+        return 1
+    }
+fi

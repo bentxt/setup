@@ -1,0 +1,126 @@
+#!/bin/sh
+#
+# NAME
+#
+#   slurp - read a file into the clipboard
+#
+# DESCRIPTION
+#
+#   Read a file given as argument or from stdin
+#
+# SYNOPSIS
+#
+#   slurp [OPTIONS] [filename], or run with --help
+#
+# OPTIONS
+#
+#   --help          show help
+#
+
+set -eu
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+warn() { echo "Warn: $*" >&2; }
+info() { echo "$@" >&2; }
+die() {
+    echo "$@" >&2
+    exit 1
+}
+
+stamp() { date +'%Y%m%d%H%M%S'; }
+absdir() (cd "${1}" && pwd -P)
+
+utils_slurp__slurp() {
+    local file="${1:-}"
+    [ -f "$file" ] || {
+        fail "invalid file '$file'"
+        return 1
+    }
+
+    local os=
+    if [ -n "${HOST_OS:-}" ] ; then
+        os="${HOST_OS}"
+    else
+        os="$(uname | tr '[:upper:]' '[:lower:]')"
+    fi
+
+    case "$os" in
+        linux)
+            cat "$file" | xclip -sel clip
+        ;;
+        darwin)
+            cat "$file" | pbcopy 
+        ;;
+        *)
+            if [ -z "$os" ] ; then
+                die "Err: could not fetch OS"
+            else
+                die "Err: OS '$os' is not supported yet" 
+            fi
+            exit 1;
+        ;;
+    esac
+}
+
+
+utils_slurp__run() {
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        -*)
+            info "invalid arg '$1', run --help"
+            return 1
+            ;;
+        *) break ;;
+        esac
+        shift
+    done
+
+    local file=
+    if [ -t 0 ]; then
+        file="${1:-}"
+    else
+        # perl -ne 'print'
+        while read -r line ; do
+            file="$line"
+        done
+    fi
+
+    utils_slurp__slurp "$file"
+
+}
+
+utils_slurp__main() {
+
+    if [ $# -eq 0 ] ; then
+        info "not enough args"
+        perl -ne 's/^#+\s*//g; die "usage: $_" if($_ && $s); $s=1 if (/^SYNOPSIS\s*$/);' "$0" >&2
+        exit 1
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "${1:-}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+            ;;
+            *) break ;;
+        esac
+        shift
+    done
+}
+
+
+#### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+    MAINSCRIPT="$(absdir "$(dirname "jsdf")")" 
+    # . "$MAINSCRIPT/libutil.sh"
+    if [ -t 0 ]; then
+        utils_slurp__main "$@" || die 'Abort main ...'
+    else
+        die "Err: must be use interactively ..."
+    fi
+    utils_slurp__run "$@" || die 'Abort run ...'
+fi

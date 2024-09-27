@@ -1,0 +1,216 @@
+#!/bin/sh
+#
+# NAME
+#
+#   template - Template for shell scripts
+#
+# DESCRIPTION
+#
+#   Shell scripts that also can be used as modules/libraries for other scripts.
+#   Fully posix compatible
+#
+# SYNOPSIS
+#
+#   template [OPTIONS] [filename], or run with --help
+#
+# OPTIONS
+#
+#   --help          show help
+#
+
+set -eu
+
+[ -z ${DEBUG+x} ] && DEBUG=
+
+UTILS_TEMPLATOR__TEMPLATE=
+UTILS_TEMPLATOR__RXSTART='^\s*[a-zA-Z0-9_]+__'
+UTILS_TEMPLATOR__RXEND='\s*\(\s*\)' 
+
+utils_templator__init() {
+    local maindir="${1:-}"
+    if ! [ -d "${maindir}" ]; then
+        fail "invalid maindir  '${maindir}'"
+        return 1
+    fi
+
+    if [ -f "$maindir/_template.dash" ] ; then
+        UTILS_TEMPLATOR__TEMPLATE="$maindir/_template.dash"
+    else
+        fail "could not find and set template "
+        return 1
+    fi
+
+    
+}
+
+utils_templator__chunk() {
+    local start="${1:-}"
+    if [ -z "$start" ] ; then
+        fail no start
+        return 1
+    fi
+    local end="${2:-}"
+
+    if [ -n "$end" ] ; then
+        perl  -sne 'BEGIN{$p}; $p=1 if /$start/ ; exit if(/$end/); print if $p;' -- -start="$start" -end="$end" "$UTILS_TEMPLATOR__TEMPLATE"
+    else
+        perl  -sne 'BEGIN{$p}; $p=1 if /$start/ ; print if $p;' -- -start="$start" "$UTILS_TEMPLATOR__TEMPLATE"
+    fi
+
+
+}
+
+utils_templator__chapters() {
+    
+    for chapter in $@ ; do
+
+        case "$chapter" in
+            header) utils_templator__chunk '^\s*#' "${UTILS_TEMPLATOR__RXSTART}init${UTILS_TEMPLATOR__RXEND}" ;;
+            init) utils_templator__chunk "${UTILS_TEMPLATOR__RXSTART}init${UTILS_TEMPLATOR__RXEND}" "${UTILS_TEMPLATOR__RXSTART}run${UTILS_TEMPLATOR__RXEND}" ;;
+            run) utils_templator__chunk "${UTILS_TEMPLATOR__RXSTART}run${UTILS_TEMPLATOR__RXEND}" '^\s*###+\s*Prelude\s*$' 
+                ;;
+            prelude)
+                utils_templator__chunk '^\s*###+\s*Prelude\s*$' "^\s*main${UTILS_TEMPLATOR__RXEND}" 
+            ;;
+            main)
+                utils_templator__chunk "^\s*main${UTILS_TEMPLATOR__RXEND}" '^\s*###+\s*Modulino\s*$' 
+            ;;
+            modulino)
+                utils_templator__chunk '^\s*###+\s*Modulino\s*$' 
+            ;;
+            *) echo todo ;;
+        esac
+    done
+}
+
+
+utils_templator__run() {
+
+	local input=
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		-*)
+			info "invalid arg '$1', run --help"
+			return 1
+			;;
+		*)
+			input="$1"
+			shift
+			break
+			;;
+		esac
+		shift
+	done
+
+
+    if [ -z "$input" ]; then
+        utils_templator__chapters 'header' 'prelude' 'init' 'run' 'main' 'modulino'
+    fi
+
+    local modname="${1:-}"
+    local pattern=
+    if [ -n "$modname" ] ; then
+        local pwdname="$(basename "$PWD")"
+        pattern="s/utils_template__/${pwdname}_${modname}__/g"
+    fi
+
+
+    case "$input" in 
+        [A-Z]*) 
+            case "$input" in
+                C|Command) 
+                    echo '#!/bin/bash'
+                    echo '# '
+                    echo '# A simple command'
+                    echo '# '
+                    echo '# usage: [input]'
+                    echo '#'
+                    utils_templator__chapters 'prelude' | perl -pe "$pattern"
+                    echo 'INPUT="${1:-}"'
+                    echo '[ -n "$INPUT" ] || usage'
+                    ;;
+                S|Script) 
+                    utils_templator__chapters 'header' 'prelude' 'main'  | perl -pe "$pattern"
+                    echo 'main()'
+                    ;;
+                L|Library) 
+                    utils_templator__chapters 'header' 'init' 'prelude'   | perl -pe "$pattern"
+                    ;;
+                A|All) utils_templator__chapters 'header' 'prelude' 'init' 'run' 'main' 'modulino' | perl -pe "$pattern" ;;
+                *) echo todo;;
+            esac
+            ;;
+        *) 
+
+            for chunk in "$input" $@; do
+                [ -n "$chunk" ] || continue
+                utils_templator__chapters "$chunk" 
+            done
+            ;;
+    esac
+
+}
+
+### Prelude
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+warn() { echo "Warn: $*" >&2; }
+info() { echo "$@" >&2; }
+
+die() {
+	echo "$@" >&2
+	exit 1
+}
+stamp() { date +'%Y%m%d%H%M%S'; }
+absdir() (cd "${1}" && pwd -P)
+abspath() {
+	readlink -f "${1:-}" 2>/dev/null || {
+		perl -MCwd=abs_path -e 'print abs_path($ARGV[0]);' "${1:-}"
+	}
+}
+
+getos() { uname | tr '[:upper:]' '[:lower:]'; }
+getlines() { wc -l <"${1:-}" | tr -d ' '; }
+getnewfile() { case "$1" in */*) prn "${1%/*}/$2" ;; *) prn "$2" ;; esac }
+getnewfilext() { getnewfile "$1" "$(basename "$1" "${1##*.}")$2"; }
+
+main() {
+	local argnum="$1"
+	shift
+
+	if [ $# -eq $argnum ]; then
+		info "not enough args"
+		perl -ne 's/^#+\s*//g; die "usage: $_" if($_ && $s); $s=1 if (/^SYNOPSIS\s*$/);' "$0" >&2
+		exit 1
+	fi
+
+	while [ $# -gt 0 ]; do
+		case "${1:-}" in
+		-h | --help)
+			perl -ne 'print "$1\n" if /^\s*#\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+			exit 1
+			;;
+		*) break ;;
+		esac
+		shift
+	done
+}
+
+### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+	MAINSCRIPT="$(abspath "$0")"
+	if [ -t 0 ]; then
+		main -1 "${@}"
+	else
+		die "Err: cannot run as part of a pipe ..."
+	fi
+	utils_templator__init "${MAINSCRIPT%/*}" || die 'Abort init ...'
+	utils_templator__run "$@" || die 'Abort run ...'
+else
+	utils_templator__init "${MAINSCRIPT%/*}" || {
+		fail 'could not run init'
+		return 1
+	}
+fi

@@ -1,0 +1,148 @@
+#!/bin/sh
+#
+# NAME
+#
+#   template - Template for shell scripts
+#
+# DESCRIPTION
+#
+#   open different sources in Chrome:
+#   - urls
+#   - text files (.md/.txt)
+#   - bookmark files (.webloc)
+#
+# SYNOPSIS
+#
+#   chrome-open [OPTIONS] [input], or run with --help
+#
+# OPTIONS
+#
+#   --help          show help
+#
+
+set -eu
+
+[ -z ${DEBUG+x} ] && DEBUG=
+
+prn() { printf "%s" "$@"; }
+warn() { echo "Warn: $*" >&2; }
+fail() { echo "Fail: $*" >&2; }
+info() { echo "$@" >&2; }
+die() {
+	echo "$@" >&2
+	exit 1
+}
+
+stamp() { date +'%Y%m%d%H%M%S'; }
+absdir() (cd "${1}" && pwd -P)
+abspath() {
+    readlink -f "${1:-}" 2>/dev/null || {
+        perl -MCwd=abs_path -e 'print abs_path($ARGV[0]);' "${1:-}"
+    }
+}
+
+
+#### Lib
+
+utils_chrome_open__init() {
+    local maindir="${1:-}"
+    if ! [ -d "${maindir}" ]; then
+        fail "invalid maindir  '${maindir}'"
+        return 1
+    fi
+
+    . "$maindir/liburl.sh"
+    . "$maindir/webloc.dash"
+}
+
+utils_chrome_open__run() {
+
+	local input=
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		-*)
+			fail "unknown option"
+			return 1
+			;;
+		*)
+			input="$1"
+			shift
+			break
+			;;
+		esac
+		shift
+	done
+
+	if [ -z "$input" ]; then
+		fail "no valid input '$input'"
+		return 1
+	fi
+
+    local address=
+    case "${input##*/}" in
+        *.webloc)
+            address="$(utils_webloc__geturl "$input")" || {
+                fail "could not get file '$input'"
+                return 1
+            }
+
+            ;;
+        *)
+            address="$(utils_liburl__get_url "$input")" || {
+                fail "could not get file '$input'"
+                return 1
+            }
+            ;;
+    esac
+    
+	if [ -z "$address" ]; then
+		fail "could not get address for  '$input'"
+		return 1
+	fi
+
+    osascript  -e "tell application \"Chromium\" to open location \"$address\""
+    #osascript  -e "tell application \"Google Chrome\" to open location \"$fileurl\""
+
+    
+}
+
+
+utils_chrome_open__main() {
+
+    if [ $# -eq 0 ] ; then
+        info "not enough args"
+        perl -ne 's/^#+\s*//g; die "usage: $_" if($_ && $s); $s=1 if (/^SYNOPSIS\s*$/);' "$0" >&2
+        exit 1
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "${1:-}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+            ;;
+            *) break ;;
+        esac
+        shift
+    done
+}
+
+
+#### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+    MAINSCRIPT="$(abspath "$0")"
+    # . "$MAINSCRIPT/libutil.sh"
+    if [ -t 0 ]; then
+        utils_chrome_open__main "$@" || die 'Abort main ...'
+    else
+        die "Err: must be used interactively ..."
+    fi
+    utils_chrome_open__init  "${MAINSCRIPT%/*}" || die 'Abort init ...'
+    utils_chrome_open__run "$@" || die 'Abort run ...'
+else
+    utils_chrome_open__init "${MAINSCRIPT%/*}" || {
+        fail 'could not run init'
+        return 1
+    }
+fi

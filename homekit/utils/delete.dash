@@ -1,0 +1,406 @@
+#!/bin/sh
+#
+# NAME
+#
+#   find-delete-broken-symlinks 
+#
+# DESCRIPTION
+#
+#   Find and delete broken symlinks
+#
+#
+# SYNOPSIS
+#
+#   find-broken-symlinks [OPTIONS] [dir]
+#
+# OPTIONS
+#   target:           
+#       -brokensym    delete broken symlinks
+#       -files          delete files
+#       -folders)       delete folder 
+#
+#   modes:              
+#       -probe      do not execute, print only
+#       -quiet      as quiet as possible
+#
+#
+#   -conf   print configuration (home dir, ...)
+#
+#
+#   --help                      show help
+#
+
+set -u
+
+[ -z ${DEBUG+x} ] && DEBUG=
+
+INFO=1
+
+UTILS_DELETE__STATEDIR=
+
+
+utils_delete__init() {
+
+    local statehome="${XDG_STATE_HOME:-$HOME/.local/state}"
+    if [ -d "$statehome" ] ; then
+        UTILS_DELETE__STATEDIR="$statehome/utils_delete"
+    else
+        fail "no state home under '$statehome', please create or first or set XDG_STATE_HOME"
+        return 1
+    fi
+}
+
+utils_delete__run() {
+
+    local opt_target=
+    local opt_probe=0
+    local input=
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -brokensym|-f|-files|-d|-dirs)  
+                if [ -n "$opt_target" ] ; then
+                    fail "opt_target already set '$opt_target'"
+                    return 1
+                fi
+                opt_target="$1"
+            ;;
+            -quiet)  INFO=;;
+            -probe) opt_probe=1 ;;
+            -conf) 
+                echo "home : $UTILS_DELETE__STATEDIR"
+                return 0
+                ;;
+            -*)
+                fail  "invalid arg '$1', run --help"
+                return 1
+            ;;
+            *) 
+                input="$1"
+                shift
+                break ;;
+        esac
+        shift
+    done
+    
+
+    if [ -n "$opt_target" ] ; then
+        [ -n "$input" ] || input="$PWD"
+
+        case "$opt_target" in
+            -brokensym) utils_delete__broken_symlinks "$opt_probe" "$input" "$@";;
+            -f|-files) utils_delete__files "$opt_probe" "$input" "$@" ;;
+            -d|-dirs) utils_delete__folders "$opt_probe" "$input" "$@" ;;
+        esac
+    else
+        utils_delete__delete_items "$opt_probe" "$input" "$@"
+    fi
+}
+
+#utils_delete__files_folders(){
+
+utils_delete__files(){
+    local opt_probe="${1:-}"
+    if [ -n "$opt_probe" ] ; then
+        shift
+    else
+        fail no opt_probe
+        return 1
+    fi
+
+    local input_dir="${1:-}"
+    if [ -n "$input_dir" ] ; then
+        shift
+    else
+        input_dir="$PWD"
+    fi
+
+    if ! [ -d "$input_dir" ] ; then
+        fail "no valid input dir '$input_dir'"
+        return 1
+    fi
+
+
+#    tar -cjf site1.tar.bz2 -C ~/ Downloads
+#
+    for item in "$input_dir"/*; do
+        [ -e "$item" ] || continue
+
+        if [ -f "$item" ]; then
+            utils_delete__delete_items "$item"
+        fi
+    done
+}
+
+utils_delete__delete_items(){
+    local opt_probe="${1:-}"
+    if [ -n "$opt_probe"  ] ; then
+        shift
+    else
+        fail no probe
+        return 1
+
+    fi
+    local input="${1:-}"
+    if [ -n "$input"  ] ; then
+        shift
+    else
+        fail no input 
+        return 1
+    fi
+
+    for inp in "$input" "$@"; do
+        if [ -L "$inp" ] ; then
+            case "$opt_probe" in
+                0) rm -f  "$inp";;
+                1) info "this is to deleted $item";;
+            esac
+        elif [ -f "$inp" ] || [ -d "$inp" ]  ; then
+            case "$opt_probe" in
+                0) utils_delete__delete "$inp";;
+                1) info "this is to deleted $item";;
+            esac
+        else
+            case "$opt_probe" in
+                0) rm -f  "$inp";;
+                1) info "this is to deleted $item";;
+            esac
+        fi
+    done
+}
+
+utils_delete__get_stamped_target(){
+    local source_item="${1:-}"
+    if [ -z "$source_item" ] ; then
+        fail no source_item
+        return 1
+    fi
+
+    local target_dir="${2:-}"
+    if [ -z "$target_dir" ] ; then
+        fail no target_dir
+        return 1
+    fi
+
+    local postfix="${3:-}"
+
+
+    if ! [ -e "$source_item" ] ; then
+        fail "no target_dir in '$source_item'"
+        return 1
+    fi
+
+    if ! [ -d "$target_dir" ] ; then
+        fail "no target_dir in '$target_dir'"
+        return 1
+    fi
+
+    local target_name=; target_name="$(basename "$source_item")"
+
+    local i=
+    local target_path=
+    for i in $(seq 1 10); do 
+        local stamp="$(date +'%Y%m%d%H%M%S')"
+        if [ -z "$stamp" ] ;then
+            fail could not get stamp
+            return 1
+        fi
+
+        local stamped_path="$target_dir/${stamp}_${target_name}${postfix}"
+
+        if [ -e "$stamped_path" ] ; then
+            prn '.'
+            sleep 1
+        else
+            target_path="$stamped_path"
+            break
+        fi
+    done
+
+    
+    if [ -n "$target_path" ] ;then
+        if [ -e "$target_path" ] ;then
+            fail "sth went wrong backup target still exists in '$target_path '"
+            return 1
+        else
+            prn "$target_path"
+        fi
+    else
+        fail could not get target_path 
+        return 1
+    fi
+}
+
+
+utils_delete__delete(){
+    local input="${1:-}"
+    if [ -z "$input" ] ; then
+        fail no input
+        return 1
+    fi
+
+    ### 
+
+    local statedir="$UTILS_DELETE__STATEDIR"
+    if [ -z "$statedir" ] ; then
+        fail no statedir
+        return 1
+    fi
+
+    mkdir -p "$statedir"
+
+    local backup_archive=
+    backup_archive="$(utils_delete__get_stamped_target "$input" "$statedir" '.tar.bz2')" || {
+        fail could not get backup path
+        return 1
+    }
+
+    if [ -z "$backup_archive" ]; then
+        fail 'could not get backup_archive '
+        return 1
+    fi
+
+    if [ -e "$backup_archive" ] ; then
+        fail "backuap archive '$backup_archive' exists"
+    fi
+
+    # clean brocken link
+    rm -f "$backup_archive"
+
+    if [ -d "$input" ] ; then
+        tar -cjf "$backup_archive" -C "$input" . || {
+            fail "could not create backup archive '$backup_archive'"
+            return 1
+        }
+    elif [ -f "$input" ] ; then
+        tar -cjf "$backup_archive"  "$input" || {
+            fail "could not create backup archive '$backup_archive'"
+            return 1
+        }
+    else
+        fail "invalid source '$input'"
+    fi
+
+    if [ -f "$backup_archive" ] ; then
+        info "$input => $backup_archive"
+        rm -rf "$input"
+    fi
+
+}
+
+
+
+
+
+utils_delete__broken_symlinks(){
+    local dir="${1:-}"
+
+    if [ -z "$dir" ] ; then
+        fail no dir given
+        return 1
+    fi
+
+    if ! [ -d "$dir" ] ; then
+        fail " no valid dir given in '$dir'"
+        return 1
+    fi
+
+    local gfind_compat=
+    
+    if [ -n "$UNIVERSAL_BIN_GFIND" ] ; then
+        gfind_compat="${HOST_BIN_GFIND}" 
+    else
+        local os=
+        if [ -n "${UNIVERSAL_HOST_OS:-}" ] ; then
+            os="$UNIVERSAL_HOST_OS"
+        else
+            os="$(getos)"
+        fi
+
+        case "$os" in
+            darwin) gfind_compat="$(command -v gfind 2> /dev/null)" ;;
+            linux) gfind_compat='find' ;;
+            *) : ;;
+        esac
+    fi
+
+    if [ -n "$gfind_compat" ] ; then
+        info 'delete with gfind compatible'
+        "${gfind_compat}" "$dir" -xtype l -print  -delete
+    else
+        info 'delete with find compatible'
+        find "$dir" -type l ! -exec test -e {} \; -print -delete
+
+    fi
+}
+
+
+
+
+### Prelude
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+warn() { echo "$*" >&2; }
+info() { [ -n "$INFO" ] && echo "$*" >&2; }
+
+timestamp() { date +'%Y%m%d%H%M%S'; }
+getos() { uname | tr '[:upper:]' '[:lower:]'; }
+getlines() { wc -l <"${1:-}" | tr -d ' '; }
+newpath() { case "$1" in */*) prn "${1%/*}/$2" ;; *) prn "$2" ;; esac }
+newpathext() { newpath "$1" "$(basename "$1" "${1##*.}")$2"; }
+
+die() {
+	echo "$@" >&2
+	exit 1
+}
+abspath() {
+	readlink -f "${1}" 2>/dev/null || {
+		perl -MCwd=abs_path -e 'print abs_path($ARGV[0]);' "${1}"
+	}
+}
+
+usage() {
+    info "not enough arguments"
+	for regex in 's/^#+\s*//g; if($_ && $s){print "usage: $_"; exit 0; };  $s=1 if (/^SYNOPSIS\s*$/);' 'if (/^\s*#+\s*([uU]sage[a-z\s-_]*:.*)\s*/){print "$1"; $s=1; exit 0 ; };'; do
+		perl -ne "${regex}"';END{exit 1 unless $s;}' "$0" >&2 && exit 1
+	done
+    exit 1
+}
+
+main() {
+	local argnum="$1"
+	shift
+
+	[ $# -eq $argnum ] && usage
+
+    local arg
+    for arg in "$@" ; do
+        case "${arg}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#+\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+                ;;
+            *) : ;;
+        esac
+    done
+}
+
+### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+	MAINSCRIPT="$(abspath "$0")"
+    [ -z "$MAINSCRIPT" ] && die "Err: could not set MAINSCRIPT"
+	if [ -t 0 ]; then
+		main -1 "${@}"
+	else
+		die "Err: cannot run as part of a pipe ..."
+	fi
+	utils_delete__init "${MAINSCRIPT%/*}" || die 'Abort init ...'
+	utils_delete__run "$@" || die 'Abort run ...'
+else
+	utils_delete__init "${MAINSCRIPT%/*}" || {
+		fail 'could not run init'
+		return 1
+	}
+fi

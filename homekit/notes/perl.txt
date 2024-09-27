@@ -1,0 +1,6 @@
+## Perl Oneliner Notes
+
+### the -s switch
+
+
+

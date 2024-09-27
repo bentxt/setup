@@ -1,0 +1,19 @@
+
+
+# vi mode for rlwrap 
+# https://news.ycombinator.com/item?id=9055523
+set editing-mode vi
+
+$if mode=vi
+
+set keymap vi-command
+
+"gg": beginning-of-history
+
+"G": end-of-history
+
+set keymap vi-insert
+
+"jj": vi-movement-mode
+
+"\C-p": history-search-backward C-L: clear-screen

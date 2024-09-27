@@ -1,0 +1,233 @@
+#!/bin/sh
+#
+# NAME
+#
+#   timestamp - print timestamps
+#
+# DESCRIPTION
+#
+#   Examples:
+#       
+#       timestamp minute                        -> prints 20231022150355
+#       timestamp -time ':' minute              -> prints 20231022:150355
+#       timestamp -time ':' -each '.' minute   -> prints 2023.10.22:15.03.55
+#
+#
+# SYNOPSIS
+#
+#   timestamp [OPTIONS] <item> ,  or run with --help
+#
+# OPTIONS
+#   -enc <encoding>     encoding methods: 'sqids'
+#
+#   -each <sep>
+#
+#   -time <sep>
+#
+#   --help          show help
+#
+
+set -eu
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+warn() { echo "Warn: $*" >&2; }
+info() { echo "$@" >&2; }
+die() {
+    echo "$@" >&2
+    exit 1
+}
+
+stamp() { date +'%Y%m%d%H%M%S'; }
+absdir() (cd "${1}" && pwd -P)
+getos() { uname | tr '[:upper:]' '[:lower:]'; }
+
+
+utils_timestamp__day() { date +"%Y${1:-}%m${1:-}%d"; }
+utils_timestamp__month() { date +"%Y${1:-}%m"; }
+utils_timestamp__year() { date +"%Y"; }
+
+utils_timestamp__second() { date +"%H${1:-}%M${1:-}%S"; }
+utils_timestamp__minute() { date +"%H${1:-}%M"; }
+utils_timestamp__hour() { date +"%H"; }
+
+
+
+
+utils_timestamp__sep_each_time() {
+    local item="$1"
+    local sep_each="$2"
+    local sep_time="${3:-}"
+
+}
+
+
+
+utils_timestamp__encoding_sqids(){
+    local string="$1"
+    if [ -z "$string" ] ;then
+        fail 'no string'
+        return 1
+    fi
+
+
+
+    if [ -n "${HOST_BIN_MYSQIDS_BASH:-}" ] ;then
+        bash "${HOST_BIN_MYSQIDS_BASH}" -e "$string"
+    else
+        local mysqids=; mysqids="$MAINSCRIPT/../vendor/mysqids.bash"
+        if [ -f "$mysqids" ] ; then
+            bash "$mysqids" -e "$string"
+        else
+            mysqids="$(find "$MAINSCRIPT/.."  -iname 'mysqids.bash')"
+            if [ -f "$mysqids" ] ; then
+                bash "$mysqid" -e "$string"
+            else
+                fail 'could not find mysqid'
+                return 1
+            fi
+        fi
+    fi
+}
+
+utils_timestamp__encoding(){
+    local opt_enc="$1"
+    shift
+    
+    case "$opt_enc" in
+        sqids) utils_timestamp__encoding_sqids "$@" ;;
+        *)
+            fail "encoding not (yet) valid '$opt_enc'"
+            return 1
+            ;;
+    esac
+}
+
+
+utils_timestamp__run() {
+
+    local item=
+    local opt_sep_time=
+    local opt_sep_each=
+    local opt_enc=
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        -enc) opt_enc="${2:-}"
+            if [ -n "$opt_enc" ] ; then
+                shift
+            else
+                fail 'no arg for sep time'
+                return 1
+            fi
+            ;;
+        -time) opt_sep_time="${2:-}"
+            if [ -n "$opt_sep_time" ] ; then
+                shift
+            else
+                fail 'no arg for sep time'
+                return 1
+            fi
+            ;;
+        -each) opt_sep_each="${2:-}"
+            if [ -n "$opt_sep_each" ] ; then
+                shift
+            else
+                fail 'no arg for sep each'
+                return 1
+            fi
+            ;;
+        -*)
+            info "invalid arg '$1', run --help"
+            return 1
+            ;;
+        *) 
+            item="$1"
+            shift
+            break ;;
+        esac
+        shift
+    done
+
+    if [ -z "$item" ] ; then
+        fail 'no item'
+        return 1
+    fi
+    local date_string=
+    local time_string=
+
+    case "$item" in
+        second)     
+            date_string="$(utils_timestamp__day "$opt_sep_each")"
+            time_string="$(utils_timestamp__second "$opt_sep_each")" 
+            ;;
+        minute)     
+            date_string="$(utils_timestamp__day "$opt_sep_each")"
+            time_string="$(utils_timestamp__minute "$opt_sep_each")" 
+            ;;
+        hour)       
+            date_string="$(utils_timestamp__day "$opt_sep_each")"
+            time_string="$(utils_timestamp__hour)" 
+            ;;
+        day)        date_string="$(utils_timestamp__day "$opt_sep_each")" ;;
+        month)      date_string="$(utils_timestamp__month "$opt_sep_each")" ;;
+        year)       date_string="$(utils_timestamp__year)" ;;
+        *)
+            fail "invalid item '$item'"
+            return 1
+            ;;
+    esac
+
+    if [ -n "$opt_enc" ] ;then
+        if [ -n "$opt_sep_time" ] || [ -n "$opt_sep_each" ] ; then
+            fail 'please no separators with -sqids'
+            return 1
+        else
+            utils_timestamp__encoding "$opt_enc" "${date_string}${time_string}"
+        fi
+    else
+        if [ -n "$time_string" ] ; then
+            if [ -n "$opt_sep_time" ] ; then
+                echo "${date_string}${opt_sep_time}${time_string}"
+            else
+                echo "${date_string}${opt_sep_each}${time_string}"
+            fi
+        else
+            echo "${date_string}"
+        fi
+    fi
+
+}
+
+utils_timestamp__main() {
+
+    if [ $# -eq 0 ] ; then
+        info "not enough args"
+        perl -ne 's/^#+\s*//g; die "usage: $_" if($_ && $s); $s=1 if (/^SYNOPSIS\s*$/);' "$0" >&2
+        exit 1
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "${1:-}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+            ;;
+            *) break ;;
+        esac
+        shift
+    done
+}
+
+
+#### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+    MAINSCRIPT="$(absdir "$(dirname "jsdf")")" 
+    # . "$MAINSCRIPT/libutil.sh"
+    if [ -t 0 ]; then
+        utils_timestamp__main "$@" || die 'Abort main ...'
+    else
+        die "Err: must be use interactively ..."
+    fi
+    utils_timestamp__run "$@" || die 'Abort run ...'
+fi

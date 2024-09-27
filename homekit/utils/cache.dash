@@ -1,0 +1,231 @@
+#!/bin/sh
+
+# NAME
+#   
+#   cache - handle the user cache
+#
+# DESCRIPTION
+#
+#   Handle actions around personal cache directory
+#
+# SYNOPSIS
+#
+#   cache <COMMAND> , or run --help
+#
+# COMMANDS
+#
+#       reset           remove contents from a cache subdir
+#       home|info       show the cache dir
+#       ls|list         list cache directories
+#
+#
+
+set -u
+
+[ -z ${DEBUG+x} ] && DEBUG=
+
+UTILS_CACHE__HOMEDIR=
+
+
+utils_cache__init(){
+    UTILS_CACHE__HOMEDIR="${XDG_cache_homedir:-$HOME/.cache}"
+}
+
+
+utils_cache__get_homedir(){
+
+    if [ -z "$UTILS_CACHE__HOMEDIR" ] ; then
+        fail 'UTILS_CACHE__HOMEDIR not set'
+        return 1
+    fi
+
+    [ -d "$UTILS_CACHE__HOMEDIR" ] || mkdir -p "$UTILS_CACHE__HOMEDIR"
+
+    prn "$UTILS_CACHE__HOMEDIR"
+}
+
+utils_cache__get_dir(){
+    local subdir="${1:-}"
+    if [ -z "$subdir" ] ; then
+        fail '(cache__get_dir): no subdir'
+        return 1
+    fi
+
+    local cache_homedir=;
+    cache_homedir="$(utils_cache__get_homedir)" || {
+        fail 'could not get cache home'
+        return 1
+    }
+
+    local cache_subdir="$cache_homedir/$subdir"
+    if [ -d "$cache_subdir" ]  ; then
+        prn "$cache_subdir"
+    else
+        fail "could not get subdir under '$cache_subdir'"
+        return 1
+    fi
+}
+
+utils_cache__reset(){
+
+    local opt_vocal="${1:-}"
+    if [ -n "$opt_vocal" ]; then 
+        shift
+    else
+        fail 'opt_vocal not set'
+        return 1
+    fi
+
+    local folder=
+    for folder in "$@"; do 
+        [ -n "$folder" ] || continue
+        local folder_path=''
+        case "$folder" in
+            '.'|'..'|'*') continue ;;
+            */*) folder_path="$folder" ;;
+            *) folder_path="$(utils_cache__get_dir "$folder")" ;;
+        esac
+
+        if [ -d "$folder_path" ] ; then
+            warn "$opt_vocal" "deleted '$folder_path'"
+            rm -rf "$folder_path" 
+        else
+            fail "could not find folder path '$folder_path'"
+            return 1
+        fi
+    done
+
+    if [ -z "$folder" ] ; then
+        warn "$opt_vocal" 'got no folders'
+    fi
+
+
+}
+
+utils_cache__list(){
+
+    local cache_homedir=;
+    cache_homedir="$(utils_cache__get_homedir)" || {
+        fail 'could not get cache home'
+        return 1
+    }
+
+    echo  "$cache_homedir"
+    ls -al  "$cache_homedir"
+}
+
+    
+utils_cache__run(){
+    
+    local opt_vocal='-verbose'
+    local arg=
+    local cmd=
+    while [ $# -gt 0 ] ; do
+        arg="$1"
+        shift
+        case "$arg" in
+            -q|--quiet) opt_vocal='-quiet' ;;
+            -*) 
+                fail "unknown option '$arg'"
+                return 1
+                ;;
+            home|info)
+                utils_cache__get_homedir
+                break
+                ;;
+            reset)  
+                utils_cache__reset "$opt_vocal" "$@"
+                break
+                ;;
+            ls|list)  
+                utils_cache__list  "$@"
+                break
+                ;;
+            *) 
+                fail "unknown arg '$arg'"
+                break 
+                ;;
+        esac
+    done
+}
+
+
+### Prelude
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+info() { echo "$@" >&2; }
+warn() {
+    case "${1:-}" in
+        '-verbose') 
+            shift
+            echo "Warn: $@" >&2
+            ;;
+        '-quiet') : ;;
+        *)
+            fail "invalid directive '${1:-}'"
+            return 1
+            ;;
+    esac
+}
+
+timestamp() { date +'%Y%m%d%H%M%S'; }
+getos() { uname | tr '[:upper:]' '[:lower:]'; }
+getlines() { wc -l <"${1:-}" | tr -d ' '; }
+newpath() { case "$1" in */*) prn "${1%/*}/$2" ;; *) prn "$2" ;; esac }
+newpathext() { newpath "$1" "$(basename "$1" "${1##*.}")$2"; }
+
+die() {
+	echo "$@" >&2
+	exit 1
+}
+abspath() {
+	readlink -f "${1}" 2>/dev/null || {
+		perl -MCwd=abs_path -e 'print abs_path($ARGV[0]);' "${1}"
+	}
+}
+
+usage() {
+    info "not enough arguments"
+	for regex in 's/^#+\s*//g; if($_ && $s){print "usage: $_"; exit 0; };  $s=1 if (/^SYNOPSIS\s*$/);' 'if (/^\s*#+\s*([uU]sage[a-z\s-_]*:.*)\s*/){print "$1"; $s=1; exit 0 ; };'; do
+		perl -ne "${regex}"';END{exit 1 unless $s;}' "$0" >&2 && exit 1
+	done
+    exit 1
+}
+
+main() {
+	local argnum="$1"
+	shift
+
+	[ $# -eq $argnum ] && usage
+
+    local arg
+    for arg in $@ ; do
+        case "${arg}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#+\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+                ;;
+            *) : ;;
+        esac
+    done
+}
+
+### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+	MAINSCRIPT="$(abspath "$0")"
+    [ -z "$MAINSCRIPT" ] && die "Err: could not set MAINSCRIPT"
+	if [ -t 0 ]; then
+		main 0 "${@}"
+	else
+		die "Err: cannot run as part of a pipe ..."
+	fi
+	utils_cache__init "${MAINSCRIPT%/*}" || die 'Abort init ...'
+	utils_cache__run "$@" || die 'Abort run ...'
+else
+	utils_cache__init "${MAINSCRIPT%/*}" || {
+		fail 'could not run init'
+		return 1
+	}
+fi

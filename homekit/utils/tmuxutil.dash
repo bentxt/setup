@@ -1,0 +1,395 @@
+#!/bin/sh
+
+# Helper/Utilities for working with tmux
+#
+# Usage: [Options] <Command> [args]
+#
+# Options:
+#   --help        show help
+#
+# Commands:
+#        a|attach)
+#        d|deattach)
+#        in|is-inside)
+#        n|new) 
+#        up)
+#        exists)
+#        is) 
+#        l|list) 
+#        ls|list-sessions) 
+#        lw|list-windows) 
+#        ga|active|get-active) 
+#        get) 
+#        gw) 
+#        gs) 
+#
+
+set -u
+
+[ -z ${DEBUG+x} ] && DEBUG=
+
+
+
+utils_tmuxutil__run() {
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        -*)
+            info "invalid arg '$1', run --help"
+            return 1
+            ;;
+        *) break ;;
+        esac
+        shift
+    done
+
+    local cmd="${1:-}"
+
+    if [ -n "$cmd" ] ; then
+        shift
+    else
+        fail "no cmd"
+        return 1
+    fi
+
+    local sessname=
+    if [ -n "${1:-}" ] ; then
+        sessname="$(echo "$1" | tr '[:lower:]' '[:upper:]')"
+        shift
+    else
+        sessname=''
+    fi
+
+    case "$cmd" in
+        a|attach) utils_tmuxutil__cmd_attach "$sessname" ;;
+        d|detach) utils_tmuxutil__cmd_detach  ;;
+        up) utils_tmuxutil__exists -verbose "$sessname" "$@" ;;
+        exists) utils_tmuxutil__exists -exact "$sessname" "$@" ;;
+        n|new) utils_tmuxutil__cmd_new  "$sessname" "$@";;
+        'in'|is-inside) utils_tmuxutil__is_inside "$sessname" "$@";;
+        ls|list-sessions) utils_tmuxutil__cmd_list "$sessname" 'sessions' "$@" ;;
+        lw|list-windows) utils_tmuxutil__cmd_list "$sessname" 'windows' "$@" ;;
+        ga|active|get-active) utils_tmuxutil__cmd_get_active;; 
+        get) utils_tmuxutil__cmd_get "$sessname" "$@" ;;
+        gw) utils_tmuxutil__cmd_get "$sessname" "$@" 'window';;
+        gs) utils_tmuxutil__cmd_get "$sessname" "$@" 'session';;
+        *) die "Err: invalid command '$cmd'" ;; 
+    esac
+}
+
+utils_tmuxutil__cmd_attach(){
+    local sessname="${1:-}"
+    if [ -z "$sessname" ] ; then
+        fail no sessname
+        return 1
+    fi
+
+    tmux attach -t "$sessname"
+}
+
+utils_tmuxutil__cmd_detach(){
+    tmux detach 
+}
+
+utils_tmuxutil__cmd_new(){
+    local sessname="${1:-}"
+    if [ -n "$sessname" ] ; then
+        shift
+    else
+        fail no sessname
+        return 1
+    fi
+
+    local winname="${1:-}"
+
+    local dir="${2:-}"
+    if [ -n "$dir"  ] ; then
+        if ! [ -d "$dir" ] ; then
+            fail "dir '$dir' is invalid"
+            return 1
+        fi
+    fi
+
+    if [ -n "$winname" ] ; then
+
+        shift
+
+        if  utils_tmuxutil__exists -exact "$sessname" "$winname" ; then
+            tmux select-window -t "=$sessname:=$winname"
+        else
+            if [ -n "$dir"  ] ; then
+                tmux new-window -n "$winname" -t "$sessname" -c "$dir"
+            else
+                tmux new-window -n "$winname" -t "$sessname"
+            fi
+        fi
+    else
+        if  utils_tmuxutil__exists -exact "$sessname" ; then
+            echo "session '$sessname' exists, please run tmux -t ..."
+        else
+            if tmux new-session -d -s "$sessname" ; then
+                    echo "session '$sessname' created in the background"
+                    echo "fetch it with 'tmux -t $sessname'"
+                    return 1
+                else
+                    fail "could not create session '$sessname'"
+                    return 1
+                fi
+            fi
+    fi
+}
+
+utils_tmuxutil__select(){
+    local sessname="${1:-}"
+    if [ -z "${sessname}" ] ; then
+        fail no sessname 
+        return 1
+    fi
+
+    local winname="${2:-}"
+
+    if [ -n "$winname" ] ; then
+        if tmux select-window -t "=$sessname:=$winname" ; then
+            echo "window '=$sessname:=$winname' selected "
+            return 0
+        else
+            fail "could not select  window '=$sessname:=$winname'" 
+            return 1
+        fi
+    else
+        if tmux select-session -t "=$sessname" ; then
+            echo "session '=$sessname' selected "
+            return 0
+        else
+            fail "could not select  session '=$sessname'" 
+            return 1
+        fi
+    fi
+}
+
+utils_tmuxutil__exists(){
+
+    local sessname=
+    local exact=
+    local verbose=
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        -exact) exact='=' ;;
+        -verbose) verbose=1 ;;
+        -*)
+            info "invalid arg '$1', run --help"
+            return 1
+            ;;
+        *)
+            sessname="${1}"
+            shift
+            break ;;
+        esac
+        shift
+    done
+    local winname="${1:-}"
+
+    if tmux 'info' > /dev/null ; then
+        [ -n "$verbose" ] && info 'tmux is running'
+    else
+        fail "(exists): tmux is not running"
+        return 1
+    fi
+
+
+    if [ -n "$exact" ] ; then
+        if [ -z "$sessname" ] ;then
+            fail '(exists) sessname needed with exact'
+            return 1
+        fi
+    else
+        [ -z "$sessname" ] && return 0
+    fi
+
+
+    if [ -n "$winname" ] ; then
+        if tmux has-session -t "${exact}$sessname:${exact}$winname" ; then
+            [ -n "$verbose" ] && info "found something with  $sessname:$winname"
+            return 0
+        else
+            return 1
+        fi
+    else
+        if tmux has-session -t "${exact}$sessname" ; then
+            [ -n "$verbose" ] && info "found something with $sessname"
+            return 0
+        else
+            return 1
+        fi
+    fi
+}
+
+
+utils_tmuxutil__is_inside(){
+
+    tmux 'info' > /dev/null || { 
+        fail "(is inside): tmux is not running"
+        return 1
+    }
+
+    if [ -z "${TERM_PROGRAM+x}" ]; then  
+        fail "(is_inside): cannot check for TERM_PROGRAM, maybe tmux is too old"
+        return 1
+    fi
+
+    if [ "$TERM_PROGRAM" = tmux ]; then
+        echo 'Inside tmux'
+        return 0
+    else
+        info 'not inside a tmux session'
+        return 1
+    fi
+}
+
+utils_tmuxutil__cmd_get_active(){
+
+    tmux 'info' > /dev/null || { 
+        fail "(get_active): tmux is not running"
+        return 1
+    }
+
+
+    local sessname=; sessname="$(tmux display-message -p '#S')"
+    if [ -z "$sessname" ] ; then
+        fail no sessname
+        return 1
+    fi
+
+    if [ $# -gt 0 ] ; then
+        utils_tmuxutil__cmd_get "$sessname" "$@" 
+    else
+        echo "$sessname"
+    fi
+
+}
+
+
+utils_tmuxutil__cmd_get(){
+    local sessname="${1:-}"
+    if [ -z "$sessname" ] ; then
+        fail "no arg: sessname"
+        return 1
+    fi
+
+    local item="${2:-}"
+    if [ -z "$item" ] ; then
+        fail "no arg: item"
+        return 1
+    fi
+
+    utils_tmuxutil__exists -exact "$sessname" || {
+        fail "session '$sessname' not exists"
+        return 1
+    }
+
+    if [ -n "$item" ] ; then
+        case "$item" in
+            s|sess|session)  tmux display-message -t "$sessname" -p '#S';;
+            w|win|window)  tmux display-message -t "$sessname" -p '#W';;
+            sw|sesswin|session:window)  tmux display-message -t "$sessname" -p '#S:#W';;
+            *) 
+                fail "(cmd_get): invalid item '$item'"
+                return 1;;
+        esac
+    else
+        tmux display-message "$sessname" -p '#S:#W'
+    fi
+
+}
+utils_tmuxutil__cmd_list(){
+    local sessname="${1:-}"
+    local item="${2:-}"
+
+
+    case "$item" in
+        s|sess|sessions) 
+            tmux 'info' > /dev/null || { 
+                fail "(cmd_list): tmux is not running"
+                return 1
+            }
+            tmux list-sessions
+            ;;
+        w|win|windows)
+            if [ -z "$sessname" ] ; then
+                fail no sessname 
+                return 1
+            fi
+            if utils_tmuxutil__exists -exact "$sessname" ; then
+                tmux list-windows -t "=$sessname"  | perl -nle '/^\d+:\s+([\w\*\-\_\.\s]+)\s\(/; print $1'
+            else
+                fail "session '$sessname' not exists"
+                return 1
+            fi
+            ;;
+        *)
+            if [ -z "$item" ] ; then
+                fail "need an item windows/sessions"
+            else
+                fail "item '$item' is not valid"
+            fi
+            return 1
+        ;;
+    esac
+}
+
+
+### Prelude
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+warn() { echo "Warn: $*" >&2; }
+info() { echo "$@" >&2; }
+
+die() {
+	echo "$@" >&2
+	exit 1
+}
+abspath() {
+	readlink -f "${1}" 2>/dev/null || {
+		perl -MCwd=abs_path -e 'print abs_path($ARGV[0]);' "${1}"
+	}
+}
+
+
+usage() {
+	for regex in 's/^#+\s*//g; if($_ && $s){print "usage: $_"; exit 0; };  $s=1 if (/^SYNOPSIS\s*$/);' 'if (/^\s*#+\s*([uU]sage[a-z\s-_]*:.*)\s*/){print "$1"; $s=1; exit 0 ; };'; do
+		perl -ne "${regex}"';END{exit 1 unless $s;}' "$0" >&2 && exit 1
+	done
+    exit 1
+}
+
+main() {
+	local argnum="$1"
+	shift
+
+	[ $# -eq $argnum ] && usage
+
+    local arg
+    for arg in "$@" ; do
+        case "${arg}" in
+            -h | --help)
+                perl -ne 'print "$1\n" if /^\s*#+\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+                exit 1
+                ;;
+            *) : ;;
+        esac
+    done
+}
+
+### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+	MAINSCRIPT="$(abspath "$0")"
+    [ -z "$MAINSCRIPT" ] && die "Err: could not set MAINSCRIPT"
+	if [ -t 0 ]; then
+		main 0 "${@}"
+	else
+		die "Err: cannot run as part of a pipe ..."
+	fi
+	utils_tmuxutil__run "$@" || die 'Abort run ...'
+fi

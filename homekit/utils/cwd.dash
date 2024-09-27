@@ -1,0 +1,112 @@
+#!/bin/sh
+
+# NAME
+# 
+#   cwd - Do things with cwd / PWD
+#
+#
+# DESCRIPTION
+#
+# Copy, edit, etc. the "C"urrent "W"orking "D"irectory
+#
+# SYNOPSIS
+#
+#   template [COMMANDS] [filename], or run with --help
+#
+# COMMANDS
+#
+#   copy            copy the cwd into the clipboard
+
+set -eu
+
+[ -z ${DEBUG+x} ] && DEBUG=
+
+
+
+utils_cwd__copy(){
+
+    local os
+    if [ -n "$UNIVERSAL_HOST_OS" ] ; then
+        os="$UNIVERSAL_HOST_OS"
+    else
+        os="$(uname | tr '[:upper:]' '[:lower:]')" 
+    fi
+
+    case "$os" in
+        darwin) pwd -P | tr -d '\n' |  pbcopy  ; pbpaste ;;
+        *)
+            fail "Err: todo cwdcopy fo ros '$os'"
+            return 1
+            ;;
+    esac
+}
+
+utils_cwd__run() {
+    while [ $# -gt 0 ]; do
+        local arg="$1"
+        shift
+        case "$arg" in
+        -*)
+            fail "unknown option '$arg'"
+            return 1
+            ;;
+        copy) 
+            utils_cwd__copy "$@" 
+            return 0
+            ;;
+        *)
+            fail "unknown cmd '$arg'"
+            return 1
+            ;;
+        esac
+        shift
+    done
+
+}
+
+### Prelude
+
+prn() { printf "%s" "$@"; }
+fail() { echo "Fail: $*" >&2; }
+info() { echo "$@" >&2; }
+die() {
+    echo "$@" >&2
+    exit 1
+}
+
+stamp() { date +'%Y%m%d%H%M%S'; }
+absdir() (cd "${1}" && pwd -P )
+
+main() {
+    local argnum="$1"
+    shift
+
+    if [ $# -eq $argnum ]; then
+        info "not enough args"
+        perl -ne 's/^#+\s*//g; die "usage: $_" if($_ && $s); $s=1 if (/^SYNOPSIS\s*$/);' "$0" >&2
+        exit 1
+    fi
+
+    while [ $# -gt 0 ]; do
+        case "${1:-}" in
+        -h | --help)
+            perl -ne 'print "$1\n" if /^\s*#\s(.*)/; exit if /^\s*[^#\s]+/;' "$0" >&2
+            exit 1
+            ;;
+        *) break ;;
+        esac
+        shift
+    done
+}
+
+### Modulino
+
+if [ -z "${MAINSCRIPT:-}" ]; then
+    MAINSCRIPT="$(abspath "$0")"
+    if [ -t 0 ]; then
+        main -1 "${@}"
+    else
+        die "Err: cannot run as part of a pipe ..."
+    fi
+    utils_cwd__run "$@" || die 'Abort run ...'
+fi
