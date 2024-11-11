@@ -1,0 +1,12 @@
+Markdown
+========
+
+
+## Pandoc Header
+
+    % title
+    % author(s) (separated by semicolons)
+    % date
+
+
+

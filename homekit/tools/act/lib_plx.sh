@@ -25,4 +25,3 @@ libplx__get_plxcmd(){
     fi
 }
 
-libplx__get_plxcmd "$@"

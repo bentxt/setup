@@ -54,3 +54,11 @@ dirname "$(cd "$(dirname "$1")"; pwd)/$(basename "$1")"
 
 p='/usr/local/pup'
 echo "${p##*}"
+
+
+## Which file i s newer
+
+    FILE1 -nt FILE2
+             FILE1 is newer (modification date) than FILE2
+       FILE1 -ot FILE2
+              FILE1 is older than FILE2

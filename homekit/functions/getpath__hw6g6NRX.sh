@@ -68,7 +68,7 @@ getpath__hw6g6NRX(){
         *) die "Err: is not looking like a plx file $input_file" ;;
     esac
 
-    if [ -f "$filepath" ] ; then
+    if [ -e "$filepath" ] ; then
         printf "%s" "$filepath"
     else
         if [ -n "$opt_check_existing" ] ; then

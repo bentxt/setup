@@ -51,7 +51,7 @@ findfiles_owl_list__QKaRaY2A(){
     else
         cd "$find_dir"
 #        echo find '.' -mindepth "$mindepth"  $find_args -iname "*$filter*$file_ext" -print0 >&2 
-        find '.' -mindepth "$mindepth"  $find_args -iname "*$filter*$file_ext" -print0 | perl -0 -n -e 'print("$_" .  "#@;@#")' 
+        find * -mindepth "$mindepth"  $find_args -iname "*$filter*$file_ext" -print0 | perl -0 -n -e 'print("$_" .  "#@;@#")' 
     fi
 }
 

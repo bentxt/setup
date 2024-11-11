@@ -8,8 +8,7 @@
 #
 #
 # User defined
-export AUXFILES="$HOME/aux"
-
+export HOMEKIT="$HOME/kit"
 export LLVM_VERSION=12
 # XDG Base Directory Specification
 # https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
@@ -65,20 +64,20 @@ test -d "$HOME/.cargo/bin" && export PATH="$HOME/.cargo/bin:$PATH"
 test -d "/Applications/Racket v8.12/bin" &&  export PATH="/Applications/Racket v8.12/bin:$PATH"
 test -d "$HOME/go/bin" && export PATH="$HOME/go/bin:$PATH"
 test -d "$HOME/local/dlang/dmd2/osx/bin" && export PATH="$HOME/local/dlang/dmd2/osx/bin:$PATH"
+test -d "/usr/local/opt/llvm@19/bin" && export PATH="/usr/local/opt/llvm@19/bin:$PATH"
+
 ### LANG 
 test -d "$JAVA_HOME" &&  export PATH="$JAVA_HOME/bin:$PATH"
 test -d "$LLVM_HOME" &&  export PATH="$LLVM_HOME/bin:$PATH"
+test -d "$HOME/build/lunarml/lunarml/bin" && export PATH="$HOME/build/lunarml/lunarml/bin:$PATH"
+
 #
 ## ALIASES
-test -f $AUXFILES/aliases/utils-aliases_profile.sh && source $AUXFILES/aliases/utils-aliases_profile.sh
-
-test -f $AUXFILES/aliases/basic-aliases-profile.sh && source $AUXFILES/aliases/basic-aliases-profile.sh
-test -f $AUXFILES/aliases/plx_profile.sh && source $AUXFILES/aliases/plx_profile.sh
-test -f $AUXFILES/aliases/tools-aliases.sh && source $AUXFILES/aliases/tools-aliases.sh
-test -f $AUXFILES/aliases/basics.sh && source $AUXFILES/aliases/basics.sh
-
-
-
+test -f $HOMEKIT/aliases/utils-aliases_profile.sh && source $HOMEKIT/aliases/utils-aliases_profile.sh
+test -f $HOMEKIT/aliases/basic-aliases-profile.sh && source $HOMEKIT/aliases/basic-aliases-profile.sh
+test -f $HOMEKIT/aliases/plx_profile.sh && source $HOMEKIT/aliases/plx_profile.sh
+test -f $HOMEKIT/aliases/tools-aliases.sh && source $HOMEKIT/aliases/tools-aliases.sh
+test -f $HOMEKIT/aliases/basics.sh && source $HOMEKIT/aliases/basics.sh
 # Basics
 alias chmox='chmod 0755'
 # In profile only essential commands
@@ -88,34 +87,31 @@ test -f $HOME/.bin/ack.pl && alias ack="perl $HOME/.bin/ack.pl"
 test -f $HOME/.bin/rename.pl && alias rename="perl $HOME/.bin/rename.pl"
 alias mamperl='/Applications/MAMP/Library/bin/perl'
 alias mampcpan='/Applications/MAMP/Library/bin/cpan'
+alias webstorm='open -na "WebStorm.app" --args '
+alias ws=webstorm
+
 command -v eza >/dev/null && alias ls='eza'
 command -v bat >/dev/null && alias cat='bat'
-alias perl='/Applications/MAMP/Library/bin/perl'
-alias cpan='/Applications/MAMP/Library/bin/cpan'
-
-
 export LD_LIBRARY_PATH=""
 test -d "/usr/local/lib" && export LD_LIBRARY_PATH="/usr/local/lib"
-
 command -v brew >/dev/null && export BREW_PREFIX=$(brew --prefix)
 test -n "$BREW_PREFIX" && test -d "$BREW_PREFIX/lib" && test -z "$LD_LIBRARY_PATH" && export LD_LIBRARY_PATH="$BREW_PREFIX/lib"
 test -n "$BREW_PREFIX" && test -d "$BREW_PREFIX/lib" && test -n "$LD_LIBRARY_PATH" && test "$LD_LIBRARY_PATH" != "$BREW_PREFIX/lib" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$BREW_PREFIX/lib"
-
 command -v brew >/dev/null && export BREW_OPENSSL_PREFIX="$(brew --prefix openssl)"
 test -n "$BREW_OPENSSL_PREFIX" && test -d "$BREW_OPENSSL_PREFIX/lib" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$BREW_OPENSSL_PREFIX/lib"
-
 test -d "/usr/lib" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/lib"
 test -d "/opt/local/lib" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/opt/local/lib"
 test -d "/usr/local/lib64" && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib64"
-
 export DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH:$LD_LIBRARY_PATH"
-
-
 export PKG_CONFIG_PATH=''
-
 test -d "/usr/local/lib/pkgconfig" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig"
 test -d "/usr/local/share/pkgconfig" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/share/pkgconfig"
 test -d "/usr/local/opt/pkgconfig" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/pkgconfig"
 test -d "/usr/X11/lib/pkgconfig" && export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/X11/lib/pkgconfig"
+alias perl='/Applications/MAMP/Library/bin/perl'
+alias cpan='/Applications/MAMP/Library/bin/cpan'
+
+alias cc=gcc-13
 
 
+test -f "$HOME/kit/devtools/clue-prep.sh" && alias clue-prep="sh $HOME/kit/devtools/clue-prep.sh"
