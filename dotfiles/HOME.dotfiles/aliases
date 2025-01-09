@@ -1,0 +1,23 @@
+# ~/.aliases
+
+alias chmox='chmod 0755'
+
+test -f '/usr/local/opt/vim/bin/vim' && alias vim='/usr/local/opt/vim/bin/vim'
+test -f $HOME/.bin/abspath.sh && alias abspath="dash $HOME/.bin/abspath.sh"
+test -f $HOME/.bin/ack.pl && alias ack="perl $HOME/.bin/ack.pl"
+test -f $HOME/.bin/rename.pl && alias rename="perl $HOME/.bin/rename.pl"
+
+alias mamperl='/Applications/MAMP/Library/bin/perl'
+alias mampcpan='/Applications/MAMP/Library/bin/cpan'
+alias webstorm='open -na "WebStorm.app" --args '
+alias ws=webstorm
+
+command -v eza >/dev/null && alias ls='eza'
+command -v bat >/dev/null && alias cat='bat'
+
+alias perl='/Applications/MAMP/Library/bin/perl'
+alias cpan='/Applications/MAMP/Library/bin/cpan'
+
+alias cc=gcc-13
+
+

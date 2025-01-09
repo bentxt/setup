@@ -21,11 +21,8 @@ absdir() {
 
 LINKDIR="${1:-}"
 
-##
-
 SCRIPTNAME="${0##*/}"
 SCRIPTDIR="$(absdir "$0")"
-
 
 PWDNAME="${PWD##*/}"
 PWDPATH="$(absdir "${PWD}")"
@@ -47,9 +44,15 @@ fi
 install_to_linkdir(){
     if [ -d "$LINKDIR" ] ; then
         local i="${1:-}"
-        local bi="${2:-}"
+        [ -e "$i" ] || die "Err: item $i not exists"
 
-
+        local bi
+        if [ -n "${2:-}" ] ; then
+            bi="${2}"
+        else
+            bi="$(basename "$i")"
+        fi
+        
         rm -f "$LINKDIR/$bi"
         ln -s "$i" "$LINKDIR/$bi"
         rm -f "$LINKDIR/.$bi"
@@ -76,6 +79,7 @@ handle_dir(){
     local bi="$1"
     local i="$2"
 
+
     local target_name="${bi%.*}"
 
     # magic: fish-config -> config/fish; HOME.d -> /home/baba
@@ -84,10 +88,13 @@ handle_dir(){
     local target_path=
     case "$target_folder" in
         /*) target_path="$target_folder" ;;
-        *) target_path="$HOME/.$target_folder" ;;
+        */*) target_path="$HOME/.$target_folder" ;;
+        *) 
+            target_path="$HOME/.$target_folder" 
+            install_to_linkdir "$target_path" "$target_folder"
+            ;;
     esac
 
-    install_to_linkdir "$i" "$bi"
 
 
     case "$bi" in
@@ -106,6 +113,7 @@ handle_dir(){
                     target_join_path="$target_path/"
                     ;;
             esac
+
 
             for ii in "$i"/* ; do
                 [ -f "$ii" ] || continue
@@ -154,10 +162,10 @@ handle_dotfiles(){
 
         if [ -f "$i" ]; then
             case "$bi" in
-                *profile|*rc)
+                [A-Z]*|*.*) : ;; # ignore files: uppercase and/or extension
+                *)               # link all the rest
                     libutil__link_to_target "$i" "$HOME/.$bi" 
                     ;;
-                *) : ;;
             esac
         elif [ -d "$i" ]; then
             handle_dir "$bi" "$i"

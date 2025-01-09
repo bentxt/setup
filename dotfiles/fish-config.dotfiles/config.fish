@@ -6,7 +6,7 @@
 # start in insert mode
 
 
-set -gx GPG_TTY (/usr/bin/tty)
+
 
 ### Interactive Shell Only
 # if this called during the init of a script its time to go
@@ -15,69 +15,28 @@ set -gx GPG_TTY (/usr/bin/tty)
 
 # sourcing for environment variables and aliases
 
-
 set DEBUG ''
 
-if test -z "$UNIVERSAL_FISH_PROFILE_INITIALIZED"
-    if test -f $HOME/.config/fish/universals.fish 
-        source $HOME/.config/fish/universals.fish && set -xU UNIVERSAL_FISH_PROFILE_INITIALIZED 1
-    else
-        echo "cannot find  $HOME/.config/fish/universals.fish, skip"
-    end
+if not status --is-interactive
+	exit
 end
 
-function sourcing_files        
+test -f $HOME/.profile && source $HOME/.profile
+test -f  $HOME/.config/profile/setup-loader.fish  && source  $HOME/.config/profile/setup-loader.fish 
 
-    for dir in $argv
-        [ -n "$DEBUG" ] && echo "try dir '$dir'"
-        [ -d "$dir" ] || continue
+exit
 
-        for f in $dir/*.*sh
-            [ -n "$DEBUG" ] && echo "try file '$f'"
-            [ -f "$f" ] || continue
-            switch $f
-                case '_*' 'lib*'
-                    continue
-                case '*.sh' '*.fish'
-                    [ -n "$DEBUG" ] && echo source $f
-                    source $f
-            end
-        end
-    end
-end
+
+exit
 
 
 
-######## NONINTERACTIVE SHELL
 
-
-if test -f "$HOME/.profile"
-    . $HOME/.profile
-else
-    echo "Warn: ~/.profile not found" >&2
-end
-
-sourcing_files "$HOME/kit/conf"
-
-
-status is-interactive || return 0 
-
-
-######## INTERACTIVE SHELL
-
+set -gx GPG_TTY (/usr/bin/tty)
 
 fish_vi_key_bindings insert
 
-
-sourcing_files "$HOME/kit/conf"
-
-sourcing_files "$HOME/kit/aliases"
-
-if [ -n "$XDG_CACHE_HOME" ] 
-    sourcing_files "$XDG_CACHE_HOME/utils_aliasutils"
-else
-    sourcing_files "$HOME/.cache/utils_aliasutils"
-end
+exit
 
 
 function goto
@@ -110,3 +69,4 @@ set --export PATH $BUN_INSTALL/bin $PATH
 
 
 test -f $BKB_TOOLSET/aliases/functions.fish && source $BKB_TOOLSET/aliases/functions.fish
+

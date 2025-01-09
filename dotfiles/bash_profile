@@ -1,30 +1,48 @@
-source ~/.profile
-# bash_profile: loaded in interactive login shell
-# 
+# ~/.bash_profile: 
+#
+# - executed by the command interpreter for login shells.
+# - executed by the command interpreter when opening a new terminal window
+# - not executed when starting a new `bash` interpreter inside eg `fish`
+#
+# ~/.bash_profile is only sourced by bash when started in login mode. That is
+# typically when you log in at the console 
+#
+# When you log in graphically, ~/.profile will be specifically sourced by the
+# script that launches gnome-session (or whichever desktop environment you're
+# using). So ~/.bash_profile is not sourced at all when you log in
+# graphically
+
 # Because of this file's existence, neither ~/.bash_login nor ~/.profile
 # will be sourced.
-# This eventually source ~/.bashrc which inturn sources ~/.profile
+#
 
+# Because ~/.profile isn't invoked if this files exists,
+# we must source ~/.profile to get its settings:
 
 # The following sources ~/.bashrc in the interactive login case,
 # because .bashrc isn't sourced for interactive login shells:
 # Example $-: 'himBH'
 #
+#
+#
+#
 
 case "$-" in 
     *i*) 
-        if [ -r ~/.bashrc ]; then 
-            . ~/.bashrc
+        if [ -r "$HOME/.bashrc" ]; then 
+            . "$HOME/.bashrc"
         else
             echo "Warn: could not load ~/.bashrc" >&2
         fi
     ;;
-    *) echo "Warn: ~/.bashrc, not loades" >&2 
-    ;; 
+    *) 
+        echo "Warn: ~/.bashrc, not loades" >&2 
+        ;; 
 esac
 
-# Added by OrbStack: command-line tools and integration
-# Comment this line if you don't want it to be added again.
-source ~/.orbstack/shell/init.bash 2>/dev/null || :
 
-. "/Users/ben/.wasmedge/env"
+
+
+# I'm still trying to wrap my head about what to put here.  A suggestion
+# would be to put all the `bash` prompt coloring sequence functions as
+# described on http://brettterpstra.com/2009/11/17/my-new-favorite-bash-prompt/
